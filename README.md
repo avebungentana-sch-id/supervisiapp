@@ -1,2 +1,0 @@
-# supervisiapp
-aplikasi supervisi akademik
