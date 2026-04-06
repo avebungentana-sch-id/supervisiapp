@@ -100,11 +100,15 @@
     const Calendar = createIcon('fa-calendar-alt');
     const LogOut = createIcon('fa-sign-out-alt');
     const Key = createIcon('fa-key');
+    const Bars = createIcon('fa-bars');
 
     // --- Komponen Utama Aplikasi ---
     function App() {
       // --- State Auth ---
       const [currentUser, setCurrentUser] = useState(null);
+
+      // --- State Mobile UI ---
+      const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
       // --- State Utama ---
       const [schoolInfo, setSchoolInfo] = useState({ 
@@ -178,27 +182,22 @@
         if (!db || !isFirebaseReady || !window.FirebaseSDK) return;
         const { collection, doc, onSnapshot } = window.FirebaseSDK;
 
-        // 1. Sync Profil Sekolah
         const unsubSchool = onSnapshot(doc(db, "schoolInfo", "main"), (docSnap) => {
           if (docSnap.exists()) setSchoolInfo(docSnap.data());
         }, err => console.error(err));
 
-        // 2. Sync Guru
         const unsubTeachers = onSnapshot(collection(db, "teachers"), (snap) => {
           setTeachers(snap.docs.map(d => d.data()));
         }, err => console.error(err));
 
-        // 3. Sync Kategori
         const unsubCategories = onSnapshot(collection(db, "categories"), (snap) => {
           setCategories(snap.docs.map(d => d.data()));
         }, err => console.error(err));
 
-        // 4. Sync Hasil Supervisi
         const unsubSupervisions = onSnapshot(collection(db, "supervisions"), (snap) => {
           setSupervisions(snap.docs.map(d => d.data()));
         }, err => console.error(err));
 
-        // 5. Sync Jadwal
         const unsubSchedules = onSnapshot(collection(db, "schedules"), (snap) => {
           setSchedules(snap.docs.map(d => d.data()));
         }, err => console.error(err));
@@ -208,16 +207,11 @@
         };
       }, [db, isFirebaseReady]);
 
-      // 1. Set default selected year saat load pertama kali
       useEffect(() => {
-        if(schoolInfo.activeYear) {
-          setSelectedYear(schoolInfo.activeYear);
-        }
+        if(schoolInfo.activeYear) setSelectedYear(schoolInfo.activeYear);
       }, [schoolInfo.activeYear]);
 
-      // 2. Backward Compatibility Lokal
       useEffect(() => {
-        // Hanya berlaku untuk struktur memori lokal agar tidak error. Database Firebase di-manage oleh Admin.
         let modified = false;
         const updatedTeachers = teachers.map(t => {
           if (!t.academicYear) { modified = true; return {...t, academicYear: '2025/2026'}; }
@@ -242,13 +236,10 @@
              await signInWithEmailAndPassword(auth, email, password);
              setActiveTab('dashboard');
           } catch (err) {
-             // Fitur khusus: Auto-create akun admin jika belum ada (hanya untuk kemudahan setup pertama)
              if (username === 'admin' && password === 'admin' && err.code === 'auth/user-not-found') {
                 await createUserWithEmailAndPassword(auth, email, password);
                 setActiveTab('dashboard');
-             } else {
-                throw err;
-             }
+             } else { throw err; }
           }
         } catch(err) {
           let msg = err.message;
@@ -338,18 +329,17 @@
              <div className="min-h-screen bg-slate-100 flex flex-col justify-center items-center p-4">
                <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden relative">
                  
-                 {/* Indikator Status Firebase di Login */}
                  <div className="absolute top-4 right-4 flex items-center gap-1.5 bg-white/20 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 z-10">
                    <span className={`w-2 h-2 rounded-full ${isFirebaseReady ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse' : 'bg-slate-300'}`}></span>
                    <span className="text-[9px] font-bold tracking-wider text-white">{isFirebaseReady ? 'DB TERHUBUNG' : 'MEMUAT DB...'}</span>
                  </div>
 
-                 <div className="bg-indigo-600 p-8 text-center pt-10">
-                    <BookOpen className="w-12 h-12 text-white mx-auto mb-3" />
-                    <h1 className="text-3xl font-bold text-white tracking-tight">SISA</h1>
-                    <p className="text-indigo-100 mt-2 text-sm font-medium">Sistem Informasi Supervisi Akademik</p>
+                 <div className="bg-indigo-600 p-6 md:p-8 text-center pt-10">
+                    <BookOpen className="w-10 h-10 md:w-12 md:h-12 text-white mx-auto mb-3" />
+                    <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight">SISA</h1>
+                    <p className="text-indigo-100 mt-2 text-xs md:text-sm font-medium">Sistem Informasi Supervisi Akademik</p>
                  </div>
-                 <div className="p-8">
+                 <div className="p-6 md:p-8">
                     <form onSubmit={(e) => { e.preventDefault(); handleLogin(user, pass); }}>
                        <div className="mb-5">
                           <label className="block text-sm font-semibold text-slate-700 mb-2">Username</label>
@@ -426,8 +416,6 @@
 
             if (newTeachers.length > 0 && confirm(`Ditemukan ${newTeachers.length} data guru dalam CSV. Impor ke Database Firebase?`)) {
                const { initializeApp, getAuth, createUserWithEmailAndPassword, doc, setDoc } = window.FirebaseSDK;
-               
-               // Gunakan instance Firebase terpisah (Secondary) agar Admin tidak ter-logout saat membuat user baru
                const firebaseConfig = { apiKey: "AIzaSyA6s-Dl45Sms932s9EI-Qb4EU2-xnDrTZ4", authDomain: "supervisi-app.firebaseapp.com", projectId: "supervisi-app" };
                const secondaryApp = window.secondaryFirebaseApp || initializeApp(firebaseConfig, "SecondaryApp");
                window.secondaryFirebaseApp = secondaryApp;
@@ -439,7 +427,7 @@
                      let newId = nt.id;
                      try {
                         const userCred = await createUserWithEmailAndPassword(secondaryAuth, email, nt.password);
-                        newId = userCred.user.uid; // Ikat UID Firebase ke ID Guru
+                        newId = userCred.user.uid;
                      } catch(err) {
                         if(err.code !== 'auth/email-already-in-use') console.warn(err);
                      }
@@ -480,16 +468,13 @@
         </div>
       `;
 
-      // --- Fitur Laporan Keseluruhan ---
       const handleExportCSV = () => {
         const headers = ['Nama Guru', 'Progres Terverifikasi (%)', 'Item Selesai', 'Total Item', 'Status', 'Catatan Supervisor'];
         const rows = currentTeachers.map(t => {
-          const prog = getTeacherProgress(t.id);
-          const sup = getTeacherSupervision(t.id);
+          const prog = getTeacherProgress(t.id); const sup = getTeacherSupervision(t.id);
           const status = prog.percentage === 100 ? 'Selesai' : prog.percentage > 0 ? 'Sedang Berjalan' : 'Belum Mulai';
           return [ `"${t.name}"`, prog.percentage, prog.completed, prog.total, `"${status}"`, `"${(sup.principalNotes || '').replace(/"/g, '""')}"` ].join(',');
         });
-        
         const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows].join('\n');
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement("a"); link.setAttribute("href", encodedUri); link.setAttribute("download", `Laporan_Supervisi_Keseluruhan_${selectedYear.replace('/', '-')}.csv`);
@@ -498,8 +483,7 @@
 
       const handleExportPDF = () => {
         const printWindow = window.open('', '_blank');
-        if (!printWindow) { alert("Mohon izinkan pop-up pada browser Anda untuk mencetak PDF."); return; }
-        
+        if (!printWindow) { alert("Mohon izinkan pop-up pada browser Anda."); return; }
         const htmlContent = `
           <html>
             <head>
@@ -520,9 +504,7 @@
                 <p><strong>Capaian Keseluruhan:</strong> ${overallProgress}%</p>
               </div>
               <table>
-                <thead>
-                  <tr><th width="5%">No</th><th width="25%">Nama Guru</th><th width="15%">Progres Terverifikasi</th><th width="20%">Status</th><th width="35%">Catatan Supervisor</th></tr>
-                </thead>
+                <thead><tr><th width="5%">No</th><th width="25%">Nama Guru</th><th width="15%">Progres Terverifikasi</th><th width="20%">Status</th><th width="35%">Catatan Supervisor</th></tr></thead>
                 <tbody>
                   ${currentTeachers.map((t, index) => {
                     const prog = getTeacherProgress(t.id); const sup = getTeacherSupervision(t.id);
@@ -540,7 +522,6 @@
         setTimeout(() => { printWindow.print(); }, 500);
       };
 
-      // --- Fitur Laporan Per Guru ---
       const handleExportPDFPerTeacher = (teacherId) => {
         const teacher = currentTeachers.find(t => t.id === teacherId);
         if (!teacher) return;
@@ -577,9 +558,7 @@
               </table>
               <div class="section-title">A. Rincian Pelaksanaan Supervisi</div>
               <table>
-                <thead>
-                  <tr><th width="10%">No</th><th width="60%">Tahapan / Kategori Supervisi</th><th width="30%">Status</th></tr>
-                </thead>
+                <thead><tr><th width="10%">No</th><th width="60%">Tahapan / Kategori Supervisi</th><th width="30%">Status</th></tr></thead>
                 <tbody>
                   ${currentCategories.map((cat, index) => {
                     const hasSubs = cat.subCategories && cat.subCategories.length > 0;
@@ -611,82 +590,101 @@
       };
 
       // --- Komponen Antarmuka Sidebar ---
-      const Sidebar = () => (
-        <div className="w-64 bg-slate-900 text-slate-300 flex flex-col min-h-screen border-r border-slate-800 shrink-0">
-          <div className="p-6 pb-4">
-            <div className="flex items-center gap-3 text-white mb-2">
-              <BookOpen className="w-8 h-8 text-indigo-500" />
-              <h1 className="text-xl font-bold tracking-tight">SISA</h1>
-            </div>
-            <p className="text-xs text-slate-500 font-medium">Sistem Informasi Supervisi Akademik</p>
-          </div>
-          
-          <div className="px-6 pb-4 mb-2 border-b border-slate-800">
-             <div className="bg-slate-800 rounded-lg p-3 flex items-center gap-3">
-                <div className="w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center text-white font-bold shrink-0">
-                   {currentUser.name.charAt(0).toUpperCase()}
+      const Sidebar = () => {
+        const handleNavClick = (tab) => {
+           setActiveTab(tab);
+           setIsMobileMenuOpen(false); // Tutup sidebar mobile setelah klik
+        };
+
+        return (
+          <>
+            {/* Mobile Overlay */}
+            <div className={`fixed inset-0 bg-slate-900/50 z-40 transition-opacity md:hidden ${isMobileMenuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={() => setIsMobileMenuOpen(false)}></div>
+            
+            {/* Sidebar Container */}
+            <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 flex flex-col h-screen border-r border-slate-800 shrink-0 transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+              
+              <div className="p-6 pb-4 flex items-center justify-between">
+                <div className="flex items-center gap-3 text-white">
+                  <BookOpen className="w-8 h-8 text-indigo-500" />
+                  <div>
+                     <h1 className="text-xl font-bold tracking-tight leading-none">SISA</h1>
+                     <p className="text-[10px] text-slate-500 font-medium mt-1 uppercase tracking-widest">Supervisi</p>
+                  </div>
                 </div>
-                <div className="overflow-hidden">
-                   <p className="text-sm font-bold text-white truncate">{currentUser.name}</p>
-                   <p className="text-xs text-indigo-300 uppercase font-semibold">{currentUser.role}</p>
-                </div>
-             </div>
-          </div>
+                <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden p-2 text-slate-400 hover:text-white"><X className="w-5 h-5"/></button>
+              </div>
+              
+              <div className="px-6 pb-4 mb-2 border-b border-slate-800">
+                 <div className="bg-slate-800 rounded-lg p-3 flex items-center gap-3">
+                    <div className="w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center text-white font-bold shrink-0">
+                       {currentUser.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="overflow-hidden">
+                       <p className="text-sm font-bold text-white truncate">{currentUser.name}</p>
+                       <p className="text-xs text-indigo-300 uppercase font-semibold">{currentUser.role}</p>
+                    </div>
+                 </div>
+              </div>
 
-          <nav className="flex-1 px-4 space-y-2 mt-2">
-            <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'hover:bg-slate-800 hover:text-white'}`}>
-              <LayoutDashboard className="w-5 h-5" /> <span className="font-medium">Dashboard</span>
-            </button>
-            
-            {isAdmin && (
-              <button onClick={() => setActiveTab('teachers')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'teachers' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'hover:bg-slate-800 hover:text-white'}`}>
-                <UserCircle className="w-5 h-5" /> <span className="font-medium">Manajemen Guru</span>
-              </button>
-            )}
+              <div className="flex-1 overflow-y-auto">
+                <nav className="px-4 space-y-2 mt-2">
+                  <button onClick={() => handleNavClick('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'hover:bg-slate-800 hover:text-white'}`}>
+                    <LayoutDashboard className="w-5 h-5 shrink-0" /> <span className="font-medium">Dashboard</span>
+                  </button>
+                  
+                  {isAdmin && (
+                    <button onClick={() => handleNavClick('teachers')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'teachers' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'hover:bg-slate-800 hover:text-white'}`}>
+                      <UserCircle className="w-5 h-5 shrink-0" /> <span className="font-medium">Manajemen Guru</span>
+                    </button>
+                  )}
 
-            <button onClick={() => setActiveTab('schedules')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'schedules' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'hover:bg-slate-800 hover:text-white'}`}>
-              <Calendar className="w-5 h-5" /> <span className="font-medium">Rencana Supervisi</span>
-            </button>
-            
-            {isAdmin && (
-              <button onClick={() => setActiveTab('reports')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'reports' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'hover:bg-slate-800 hover:text-white'}`}>
-                <Printer className="w-5 h-5" /> <span className="font-medium">Cetak Laporan</span>
-              </button>
-            )}
+                  <button onClick={() => handleNavClick('schedules')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'schedules' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'hover:bg-slate-800 hover:text-white'}`}>
+                    <Calendar className="w-5 h-5 shrink-0" /> <span className="font-medium">Rencana Supervisi</span>
+                  </button>
+                  
+                  {isAdmin && (
+                    <button onClick={() => handleNavClick('reports')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'reports' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'hover:bg-slate-800 hover:text-white'}`}>
+                      <Printer className="w-5 h-5 shrink-0" /> <span className="font-medium">Cetak Laporan</span>
+                    </button>
+                  )}
 
-            {isAdmin && <div className="pt-4 mt-4 border-t border-slate-800"></div>}
-            
-            {isAdmin && (
-              <>
-                <button onClick={() => setActiveTab('school')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'school' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'hover:bg-slate-800 hover:text-white'}`}>
-                  <Building2 className="w-5 h-5" /> <span className="font-medium">Profil Sekolah</span>
-                </button>
-                <button onClick={() => setActiveTab('master')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'master' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'hover:bg-slate-800 hover:text-white'}`}>
-                  <Settings className="w-5 h-5" /> <span className="font-medium">Kategori Supervisi</span>
-                </button>
-              </>
-            )}
-          </nav>
+                  {isAdmin && <div className="pt-4 mt-4 border-t border-slate-800"></div>}
+                  
+                  {isAdmin && (
+                    <>
+                      <button onClick={() => handleNavClick('school')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'school' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'hover:bg-slate-800 hover:text-white'}`}>
+                        <Building2 className="w-5 h-5 shrink-0" /> <span className="font-medium">Profil Sekolah</span>
+                      </button>
+                      <button onClick={() => handleNavClick('master')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'master' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'hover:bg-slate-800 hover:text-white'}`}>
+                        <Settings className="w-5 h-5 shrink-0" /> <span className="font-medium">Kategori Supervisi</span>
+                      </button>
+                    </>
+                  )}
+                </nav>
 
-          {isAdmin && (
-            <div className="p-4 mx-4 mb-2 mt-2 bg-slate-800/50 rounded-xl border border-slate-700/50">
-              <h4 className="text-xs font-semibold text-slate-400 mb-3 flex items-center gap-2 uppercase tracking-wider"><Database className="w-3 h-3" /> Ekspor/Impor CSV</h4>
-              <div className="space-y-2">
-                <button onClick={handleExportTeacherCSV} className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 py-2 px-3 rounded-lg text-sm transition-colors"><Download className="w-4 h-4" /> Unduh CSV Guru</button>
-                <label className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 py-2 px-3 rounded-lg text-sm cursor-pointer transition-colors">
-                  <Upload className="w-4 h-4" /> Impor CSV Guru <input type="file" accept=".csv" className="hidden" onChange={handleImportTeacherCSV} ref={fileInputRef} />
-                </label>
+                {isAdmin && (
+                  <div className="p-4 mx-4 mb-4 mt-6 bg-slate-800/50 rounded-xl border border-slate-700/50">
+                    <h4 className="text-xs font-semibold text-slate-400 mb-3 flex items-center gap-2 uppercase tracking-wider"><Database className="w-3 h-3" /> Ekspor/Impor CSV</h4>
+                    <div className="space-y-2">
+                      <button onClick={handleExportTeacherCSV} className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 py-2 px-3 rounded-lg text-sm transition-colors"><Download className="w-4 h-4" /> Unduh CSV Guru</button>
+                      <label className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 py-2 px-3 rounded-lg text-sm cursor-pointer transition-colors">
+                        <Upload className="w-4 h-4" /> Impor CSV Guru <input type="file" accept=".csv" className="hidden" onChange={handleImportTeacherCSV} ref={fileInputRef} />
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 border-t border-slate-800 shrink-0">
+                 <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 py-3 rounded-xl transition-colors font-semibold">
+                   <LogOut className="w-4 h-4" /> Keluar Sistem
+                 </button>
               </div>
             </div>
-          )}
-
-          <div className="p-4 border-t border-slate-800 mt-auto">
-             <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 py-3 rounded-xl transition-colors font-semibold">
-               <LogOut className="w-4 h-4" /> Keluar Sistem
-             </button>
-          </div>
-        </div>
-      );
+          </>
+        );
+      };
 
       // --- 1. Dashboard Component ---
       const Dashboard = () => {
@@ -694,16 +692,16 @@
            const myProgress = getTeacherProgress(currentUser.id);
            const mySup = getTeacherSupervision(currentUser.id);
            return (
-             <div className="p-8 max-w-5xl mx-auto animate-in fade-in duration-300">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+             <div className="p-4 md:p-8 max-w-5xl mx-auto animate-in fade-in duration-300">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 md:mb-8">
                   <div>
-                    <h2 className="text-3xl font-bold text-slate-800 tracking-tight">Dashboard Pribadi</h2>
-                    <p className="text-slate-500 mt-1">Status dan progres supervisi akademik Anda di tahun {selectedYear}.</p>
+                    <h2 className="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">Dashboard Pribadi</h2>
+                    <p className="text-sm md:text-base text-slate-500 mt-1">Status dan progres supervisi akademik Anda di tahun {selectedYear}.</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
-                    <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
-                      <FolderOpen className="w-5 h-5 text-slate-400 ml-2" />
-                      <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="bg-transparent text-slate-700 font-medium py-2 px-4 focus:outline-none cursor-pointer appearance-none pr-8">
+                    <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-sm w-full md:w-auto">
+                      <FolderOpen className="w-5 h-5 text-slate-400 ml-2 shrink-0" />
+                      <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="bg-transparent text-slate-700 font-medium py-2 px-2 md:px-4 focus:outline-none cursor-pointer appearance-none pr-8 w-full">
                         {schoolInfo.availableYears && schoolInfo.availableYears.map(year => (
                           <option key={year} value={year}>{year}</option>
                         ))}
@@ -712,16 +710,16 @@
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-                   <div className="bg-white rounded-2xl p-8 border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center">
-                      <div className="relative w-40 h-40 flex items-center justify-center mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 mb-6 md:mb-8">
+                   <div className="bg-white rounded-2xl p-6 md:p-8 border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center">
+                      <div className="relative w-32 h-32 md:w-40 md:h-40 flex items-center justify-center mb-4">
                          <svg className="w-full h-full transform -rotate-90 absolute inset-0">
-                            <circle cx="80" cy="80" r="70" fill="transparent" stroke="#f1f5f9" strokeWidth="12" />
-                            <circle cx="80" cy="80" r="70" fill="transparent" stroke="#10b981" strokeWidth="12" strokeDasharray="439.8" strokeDashoffset={439.8 - (439.8 * myProgress.percentage) / 100} className="transition-all duration-1000 ease-out" />
+                            <circle cx="50%" cy="50%" r="45%" fill="transparent" stroke="#f1f5f9" strokeWidth="12" />
+                            <circle cx="50%" cy="50%" r="45%" fill="transparent" stroke="#10b981" strokeWidth="12" strokeDasharray="283" strokeDashoffset={283 - (283 * myProgress.percentage) / 100} className="transition-all duration-1000 ease-out" />
                          </svg>
                          <div className="absolute flex flex-col items-center justify-center">
-                            <span className="text-4xl font-bold text-slate-800">{myProgress.percentage}%</span>
-                            <span className="text-xs text-slate-500 font-medium uppercase mt-1">Terverifikasi</span>
+                            <span className="text-3xl md:text-4xl font-bold text-slate-800">{myProgress.percentage}%</span>
+                            <span className="text-[10px] md:text-xs text-slate-500 font-medium uppercase mt-1">Terverifikasi</span>
                          </div>
                       </div>
                       <h3 className="text-lg font-bold text-slate-800 mb-1">Progres Supervisi</h3>
@@ -731,16 +729,15 @@
                    <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
                       <div>
                          <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><Activity className="w-5 h-5 text-indigo-500" /> Status Pengajuan</h3>
-                         
                          <div className="space-y-4">
-                            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
+                            <div className="flex items-center justify-between p-3 md:p-4 bg-slate-50 rounded-xl border border-slate-100">
                                <div>
                                   <p className="text-sm font-semibold text-slate-700">Item Evaluasi Diri (Draft)</p>
                                   <p className="text-xs text-slate-500 mt-0.5">Item yang Anda centang</p>
                                </div>
                                <span className="text-lg font-bold text-indigo-600">{mySup.selfEvaluatedItems.length} Item</span>
                             </div>
-                            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
+                            <div className="flex items-center justify-between p-3 md:p-4 bg-slate-50 rounded-xl border border-slate-100">
                                <div>
                                   <p className="text-sm font-semibold text-slate-700">Tautan Dokumen RPP/Modul</p>
                                   <p className="text-xs text-slate-500 mt-0.5">{mySup.driveLink ? 'Telah dilampirkan' : 'Belum dilampirkan'}</p>
@@ -751,20 +748,20 @@
                             {myProgress.isPendingVerif && (
                               <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
                                 <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                                <p className="text-xs text-amber-800 font-medium leading-relaxed">Anda telah melakukan evaluasi diri. Menunggu Admin/Supervisor memverifikasi hasil Anda.</p>
+                                <p className="text-xs text-amber-800 font-medium leading-relaxed">Anda telah melakukan evaluasi diri. Menunggu Admin memverifikasi hasil Anda.</p>
                               </div>
                             )}
                          </div>
                       </div>
 
-                      <button onClick={() => { setSelectedTeacher({id: currentUser.id, name: currentUser.name}); setIsSupervisionModalOpen(true); }} className="w-full mt-6 bg-indigo-600 text-white font-bold py-3.5 rounded-xl hover:bg-indigo-700 transition flex items-center justify-center gap-2">
-                         <Pen className="w-4 h-4" /> Buka Form Evaluasi Diri & Dokumen
+                      <button onClick={() => { setSelectedTeacher({id: currentUser.id, name: currentUser.name}); setIsSupervisionModalOpen(true); }} className="w-full mt-6 bg-indigo-600 text-white font-bold py-3 md:py-3.5 rounded-xl hover:bg-indigo-700 transition flex items-center justify-center gap-2 text-sm md:text-base">
+                         <Pen className="w-4 h-4" /> Buka Form Evaluasi & Dokumen
                       </button>
                    </div>
                 </div>
 
                 {mySup.principalNotes && (
-                   <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-6">
+                   <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 md:p-6">
                       <h3 className="text-sm font-bold text-indigo-900 mb-2 flex items-center gap-2"><AlignLeft className="w-4 h-4" /> Catatan & Rekomendasi Supervisor</h3>
                       <p className="text-sm text-indigo-800 whitespace-pre-wrap">{mySup.principalNotes}</p>
                    </div>
@@ -775,16 +772,16 @@
 
         // Dashboard Admin
         return (
-          <div className="p-8 max-w-7xl mx-auto animate-in fade-in duration-300">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+          <div className="p-4 md:p-8 max-w-7xl mx-auto animate-in fade-in duration-300">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 md:mb-8">
               <div>
-                <h2 className="text-3xl font-bold text-slate-800 tracking-tight">Dashboard Supervisi</h2>
-                <p className="text-slate-500 mt-1">Ringkasan capaian supervisi akademik tahun {selectedYear}.</p>
+                <h2 className="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">Dashboard Supervisi</h2>
+                <p className="text-sm md:text-base text-slate-500 mt-1">Ringkasan capaian supervisi akademik tahun {selectedYear}.</p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
-                  <FolderOpen className="w-5 h-5 text-slate-400 ml-2" />
-                  <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="bg-transparent text-slate-700 font-medium py-2 px-4 focus:outline-none cursor-pointer appearance-none pr-8">
+                <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-sm w-full md:w-auto">
+                  <FolderOpen className="w-5 h-5 text-slate-400 ml-2 shrink-0" />
+                  <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="bg-transparent text-slate-700 font-medium py-2 px-2 md:px-4 focus:outline-none cursor-pointer appearance-none pr-8 w-full">
                     {schoolInfo.availableYears && schoolInfo.availableYears.map(year => (
                       <option key={year} value={year}>{year}</option>
                     ))}
@@ -793,69 +790,69 @@
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex items-center gap-5">
-                <div className="w-14 h-14 rounded-full bg-blue-50 flex items-center justify-center">
-                  <Users className="w-7 h-7 text-blue-600" />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
+              <div className="bg-white rounded-2xl p-5 md:p-6 border border-slate-100 shadow-sm flex items-center gap-4 md:gap-5">
+                <div className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
+                  <Users className="w-6 h-6 md:w-7 md:h-7 text-blue-600" />
                 </div>
                 <div>
-                  <p className="text-sm text-slate-500 font-medium">Total Guru</p>
-                  <p className="text-3xl font-bold text-slate-800">{currentTeachers.length}</p>
+                  <p className="text-xs md:text-sm text-slate-500 font-medium">Total Guru</p>
+                  <p className="text-2xl md:text-3xl font-bold text-slate-800">{currentTeachers.length}</p>
                 </div>
               </div>
               
-              <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex items-center gap-5">
-                <div className="w-14 h-14 rounded-full bg-indigo-50 flex items-center justify-center">
-                  <Activity className="w-7 h-7 text-indigo-600" />
+              <div className="bg-white rounded-2xl p-5 md:p-6 border border-slate-100 shadow-sm flex items-center gap-4 md:gap-5">
+                <div className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-indigo-50 flex items-center justify-center shrink-0">
+                  <Activity className="w-6 h-6 md:w-7 md:h-7 text-indigo-600" />
                 </div>
                 <div>
-                  <p className="text-sm text-slate-500 font-medium">Total Item Supervisi</p>
-                  <p className="text-3xl font-bold text-slate-800">{getCheckableItems.length}</p>
+                  <p className="text-xs md:text-sm text-slate-500 font-medium">Total Item Supervisi</p>
+                  <p className="text-2xl md:text-3xl font-bold text-slate-800">{getCheckableItems.length}</p>
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex items-center gap-5 relative overflow-hidden">
-                <div className="absolute right-0 top-0 w-32 h-32 bg-emerald-50 rounded-full -mr-10 -mt-10 transition-transform"></div>
-                <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center z-10">
-                  <CheckCircle className="w-7 h-7 text-emerald-600" />
+              <div className="bg-white rounded-2xl p-5 md:p-6 border border-slate-100 shadow-sm flex items-center gap-4 md:gap-5 relative overflow-hidden">
+                <div className="absolute right-0 top-0 w-24 h-24 md:w-32 md:h-32 bg-emerald-50 rounded-full -mr-10 -mt-10 transition-transform"></div>
+                <div className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-emerald-100 flex items-center justify-center z-10 shrink-0">
+                  <CheckCircle className="w-6 h-6 md:w-7 md:h-7 text-emerald-600" />
                 </div>
                 <div className="z-10">
-                  <p className="text-sm text-slate-500 font-medium">Capaian Keseluruhan</p>
+                  <p className="text-xs md:text-sm text-slate-500 font-medium">Capaian Keseluruhan</p>
                   <div className="flex items-baseline gap-2">
-                    <p className="text-3xl font-bold text-slate-800">{overallProgress}%</p>
+                    <p className="text-2xl md:text-3xl font-bold text-slate-800">{overallProgress}%</p>
                   </div>
                 </div>
               </div>
             </div>
 
             {currentTeachers.length > 0 && currentCategories.length > 0 ? (
-              <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm mb-8 animate-in fade-in slide-in-from-bottom-4">
-                <h3 className="text-lg font-bold text-slate-800 mb-5 flex items-center gap-2">
+              <div className="bg-white rounded-2xl p-5 md:p-6 border border-slate-100 shadow-sm mb-8 animate-in fade-in slide-in-from-bottom-4">
+                <h3 className="text-base md:text-lg font-bold text-slate-800 mb-5 flex items-center gap-2">
                   <BarChart2 className="w-5 h-5 text-indigo-500" />
-                  Distribusi Status Supervisi (Berdasarkan Verifikasi Admin)
+                  Distribusi Status Supervisi
                 </h3>
                 <div className="flex flex-col md:flex-row gap-6 items-center">
                   <div className="flex-1 w-full">
-                    <div className="h-8 flex rounded-full overflow-hidden bg-slate-100 shadow-inner">
+                    <div className="h-6 md:h-8 flex rounded-full overflow-hidden bg-slate-100 shadow-inner">
                       <div style={{ width: `${(teacherStats.complete / (teacherStats.total || 1)) * 100}%` }} className="bg-emerald-500 hover:bg-emerald-600 transition-colors" title={`Selesai: ${teacherStats.complete} Guru`}></div>
                       <div style={{ width: `${(teacherStats.inProgress / (teacherStats.total || 1)) * 100}%` }} className="bg-amber-400 hover:bg-amber-500 transition-colors" title={`Sedang Berjalan: ${teacherStats.inProgress} Guru`}></div>
                       <div style={{ width: `${(teacherStats.notStarted / (teacherStats.total || 1)) * 100}%` }} className="bg-slate-300 hover:bg-slate-400 transition-colors" title={`Belum Mulai: ${teacherStats.notStarted} Guru`}></div>
                     </div>
-                    <div className="flex justify-between mt-5 text-sm font-medium px-2">
-                      <div className="flex items-center gap-2"><span className="w-4 h-4 rounded-full bg-emerald-500 shadow-sm"></span><span className="text-slate-600">Selesai ({teacherStats.complete} Guru)</span></div>
-                      <div className="flex items-center gap-2"><span className="w-4 h-4 rounded-full bg-amber-400 shadow-sm"></span><span className="text-slate-600">Sedang Berjalan ({teacherStats.inProgress} Guru)</span></div>
-                      <div className="flex items-center gap-2"><span className="w-4 h-4 rounded-full bg-slate-300 shadow-sm"></span><span className="text-slate-600">Belum Mulai ({teacherStats.notStarted} Guru)</span></div>
+                    <div className="flex flex-col md:flex-row justify-between mt-5 text-xs md:text-sm font-medium px-2 gap-2">
+                      <div className="flex items-center gap-2"><span className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-emerald-500 shadow-sm shrink-0"></span><span className="text-slate-600">Selesai ({teacherStats.complete})</span></div>
+                      <div className="flex items-center gap-2"><span className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-amber-400 shadow-sm shrink-0"></span><span className="text-slate-600">Sedang Berjalan ({teacherStats.inProgress})</span></div>
+                      <div className="flex items-center gap-2"><span className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-slate-300 shadow-sm shrink-0"></span><span className="text-slate-600">Belum Mulai ({teacherStats.notStarted})</span></div>
                     </div>
                   </div>
                 </div>
-                <div className="mt-8 pt-6 border-t border-slate-100 flex justify-center">
-                  <button onClick={() => setActiveTab('teachers')} className="flex items-center gap-2 bg-indigo-50 text-indigo-700 px-6 py-3 rounded-xl font-medium hover:bg-indigo-100 transition-colors">
-                    <UserCircle className="w-5 h-5" /> Buka Manajemen Guru untuk melakukan Verifikasi
+                <div className="mt-6 md:mt-8 pt-6 border-t border-slate-100 flex justify-center">
+                  <button onClick={() => setActiveTab('teachers')} className="w-full md:w-auto flex items-center justify-center gap-2 bg-indigo-50 text-indigo-700 px-6 py-3 rounded-xl font-medium hover:bg-indigo-100 transition-colors text-sm md:text-base">
+                    <UserCircle className="w-5 h-5 shrink-0" /> Verifikasi Guru Sekarang
                   </button>
                 </div>
               </div>
             ) : (
-               <div className="bg-slate-50 border border-dashed border-slate-300 rounded-2xl p-12 text-center">
+               <div className="bg-slate-50 border border-dashed border-slate-300 rounded-2xl p-8 md:p-12 text-center text-sm md:text-base">
                  <p className="text-slate-500">Silakan tambahkan Data Guru dan Kategori Supervisi terlebih dahulu untuk melihat grafik progres di Tahun Ajaran ini.</p>
                </div>
             )}
@@ -924,15 +921,15 @@
         const formatDate = (dateString) => { return new Date(dateString).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }); };
 
         return (
-          <div className="p-8 max-w-7xl mx-auto animate-in fade-in duration-300">
-            <div className="mb-8 flex flex-col md:flex-row justify-between md:items-end gap-4">
+          <div className="p-4 md:p-8 max-w-7xl mx-auto animate-in fade-in duration-300">
+            <div className="mb-6 md:mb-8 flex flex-col md:flex-row justify-between md:items-end gap-4">
               <div>
-                <h2 className="text-3xl font-bold text-slate-800 tracking-tight">Rencana Supervisi</h2>
-                <p className="text-slate-500 mt-1">{isGuru ? 'Ajukan jadwal supervisi Anda.' : 'Atur dan verifikasi pengajuan jadwal pelaksanaan supervisi.'}</p>
+                <h2 className="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">Rencana Supervisi</h2>
+                <p className="text-sm md:text-base text-slate-500 mt-1">{isGuru ? 'Ajukan jadwal supervisi Anda.' : 'Atur dan verifikasi pengajuan jadwal pelaksanaan supervisi.'}</p>
               </div>
-              <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
-                <FolderOpen className="w-5 h-5 text-slate-400 ml-2" />
-                <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="bg-transparent text-slate-700 font-medium py-2 px-4 focus:outline-none cursor-pointer appearance-none pr-8">
+              <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-sm w-full md:w-auto">
+                <FolderOpen className="w-5 h-5 text-slate-400 ml-2 shrink-0" />
+                <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="bg-transparent text-slate-700 font-medium py-2 px-2 md:px-4 focus:outline-none cursor-pointer appearance-none pr-8 w-full">
                   {schoolInfo.availableYears && schoolInfo.availableYears.map(year => (
                     <option key={year} value={year}>{year}</option>
                   ))}
@@ -940,16 +937,16 @@
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
               {/* Form Input */}
               <div className="lg:col-span-1">
-                <div className={`bg-white rounded-2xl border ${editingScheduleId ? 'border-amber-400 ring-2 ring-amber-50' : 'border-slate-200'} shadow-sm p-6 sticky top-8 transition-all`}>
+                <div className={`bg-white rounded-2xl border ${editingScheduleId ? 'border-amber-400 ring-2 ring-amber-50' : 'border-slate-200'} shadow-sm p-5 md:p-6 lg:sticky lg:top-8 transition-all`}>
                    <h3 className="text-lg font-bold text-slate-800 mb-5 flex items-center gap-2">
                      <Calendar className={`w-5 h-5 ${editingScheduleId ? 'text-amber-500' : 'text-indigo-500'}`} /> 
                      {editingScheduleId ? 'Edit Jadwal' : (isGuru ? 'Ajukan Jadwal' : 'Tambah Jadwal')}
                    </h3>
                    {isAdmin && currentTeachers.length === 0 ? (
-                      <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg border border-amber-100">Silakan tambahkan Data Guru di tahun ajaran ini terlebih dahulu.</p>
+                      <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg border border-amber-100">Silakan tambahkan Data Guru terlebih dahulu.</p>
                    ) : (
                      <form onSubmit={handleSubmitSchedule} className="space-y-4">
                         <div>
@@ -965,13 +962,15 @@
                             </select>
                           </div>
                         )}
-                        <div>
-                          <label className="block text-sm font-semibold text-slate-700 mb-1.5">Mata Pelajaran</label>
-                          <input type="text" value={formData.subject} onChange={e => setFormData({...formData, subject: e.target.value})} placeholder="Contoh: Matematika" className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm" required />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-semibold text-slate-700 mb-1.5">Kelas</label>
-                          <input type="text" value={formData.kelas} onChange={e => setFormData({...formData, kelas: e.target.value})} placeholder="Contoh: X IPA 1" className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm" required />
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="col-span-2 md:col-span-1">
+                            <label className="block text-sm font-semibold text-slate-700 mb-1.5">Mata Pelajaran</label>
+                            <input type="text" value={formData.subject} onChange={e => setFormData({...formData, subject: e.target.value})} placeholder="Matematika" className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm" required />
+                          </div>
+                          <div className="col-span-2 md:col-span-1">
+                            <label className="block text-sm font-semibold text-slate-700 mb-1.5">Kelas</label>
+                            <input type="text" value={formData.kelas} onChange={e => setFormData({...formData, kelas: e.target.value})} placeholder="X IPA 1" className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm" required />
+                          </div>
                         </div>
                         <div>
                           <label className="block text-sm font-semibold text-slate-700 mb-1.5">Materi Ajar</label>
@@ -986,7 +985,7 @@
                            <div>
                              <label className="block text-sm font-semibold text-slate-700 mb-1.5">Status Persetujuan</label>
                              <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500/50 text-sm font-semibold">
-                                <option value="Menunggu Persetujuan">Menunggu Persetujuan</option>
+                                <option value="Menunggu Persetujuan">Menunggu</option>
                                 <option value="Disetujui">Disetujui</option>
                                 <option value="Ditolak">Ditolak</option>
                              </select>
@@ -1012,25 +1011,23 @@
               {/* Tabel Jadwal */}
               <div className="lg:col-span-2">
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full">
-                  <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                        <Activity className="w-5 h-5 text-indigo-500" /> Daftar Jadwal ({selectedYear})
-                      </h3>
-                      <span className="bg-indigo-100 text-indigo-800 text-xs font-semibold px-2.5 py-1 rounded-full">{displayedSchedules.length} Jadwal</span>
-                    </div>
+                  <div className="p-4 md:p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                      <Activity className="w-5 h-5 text-indigo-500" /> Daftar Jadwal ({selectedYear})
+                    </h3>
+                    <span className="bg-indigo-100 text-indigo-800 text-xs font-semibold px-2.5 py-1 rounded-full self-start sm:self-auto">{displayedSchedules.length} Jadwal</span>
                   </div>
                   
                   <div className="overflow-x-auto flex-1">
-                    <table className="w-full text-left border-collapse">
+                    <table className="w-full text-left border-collapse min-w-[700px]">
                       <thead>
                         <tr className="bg-slate-50 text-slate-500 text-sm border-b border-slate-200">
-                          <th className="px-6 py-4 font-semibold w-16 text-center">No</th>
-                          <th className="px-6 py-4 font-semibold min-w-[150px]">Tanggal</th>
-                          {isAdmin && <th className="px-6 py-4 font-semibold min-w-[150px]">Guru</th>}
-                          <th className="px-6 py-4 font-semibold min-w-[150px]">Rincian</th>
-                          <th className="px-6 py-4 font-semibold min-w-[130px] text-center">Status</th>
-                          <th className="px-6 py-4 font-semibold w-24 text-center">Aksi</th>
+                          <th className="px-4 py-4 font-semibold w-12 text-center whitespace-nowrap">No</th>
+                          <th className="px-4 py-4 font-semibold min-w-[140px] whitespace-nowrap">Tanggal</th>
+                          {isAdmin && <th className="px-4 py-4 font-semibold min-w-[150px]">Guru</th>}
+                          <th className="px-4 py-4 font-semibold min-w-[180px]">Rincian</th>
+                          <th className="px-4 py-4 font-semibold min-w-[130px] text-center">Status</th>
+                          <th className="px-4 py-4 font-semibold w-24 text-center">Aksi</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -1047,36 +1044,36 @@
 
                           return (
                             <tr key={schedule.id} className={`transition-colors ${isBeingEdited ? 'bg-amber-50/50' : 'hover:bg-slate-50/50'}`}>
-                              <td className="px-6 py-4 text-center text-slate-500">{index + 1}</td>
-                              <td className="px-6 py-4"><span className="font-medium text-slate-800 text-sm block">{formatDate(schedule.date)}</span></td>
-                              {isAdmin && (<td className="px-6 py-4"><span className="font-bold text-indigo-700 block">{teacher ? teacher.name : 'Guru Dihapus'}</span></td>)}
-                              <td className="px-6 py-4">
+                              <td className="px-4 py-3 text-center text-slate-500 text-sm">{index + 1}</td>
+                              <td className="px-4 py-3"><span className="font-medium text-slate-800 text-xs md:text-sm block">{formatDate(schedule.date)}</span></td>
+                              {isAdmin && (<td className="px-4 py-3"><span className="font-bold text-indigo-700 block text-sm">{teacher ? teacher.name : 'Guru Dihapus'}</span></td>)}
+                              <td className="px-4 py-3">
                                 <span className="font-semibold text-slate-800 text-sm block">{schedule.subject} - {schedule.kelas}</span>
-                                <span className="text-xs text-slate-500 mt-0.5 block">Mat: {schedule.material}</span>
+                                <span className="text-xs text-slate-500 mt-0.5 block line-clamp-1">Mat: {schedule.material}</span>
                                 <span className="text-xs text-slate-500 block">Sup: {schedule.supervisor}</span>
                               </td>
-                              <td className="px-6 py-4 text-center">
+                              <td className="px-4 py-3 text-center">
                                 {isAdmin ? (
-                                   <select value={currentStatus} onChange={(e) => handleStatusChange(schedule.id, e.target.value)} className={`text-xs font-bold px-2 py-1.5 rounded outline-none cursor-pointer ${statusColor}`}>
+                                   <select value={currentStatus} onChange={(e) => handleStatusChange(schedule.id, e.target.value)} className={`text-xs font-bold px-2 py-1.5 rounded outline-none cursor-pointer ${statusColor} w-full text-center appearance-none`}>
                                       <option value="Menunggu Persetujuan">Menunggu</option><option value="Disetujui">Disetujui</option><option value="Ditolak">Ditolak</option>
                                    </select>
-                                ) : (<span className={`inline-block px-2.5 py-1 rounded-full text-xs font-bold ${statusColor}`}>{currentStatus}</span>)}
+                                ) : (<span className={`inline-block px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold whitespace-nowrap ${statusColor}`}>{currentStatus}</span>)}
                               </td>
-                              <td className="px-6 py-4 text-center">
+                              <td className="px-4 py-3 text-center">
                                 <div className="flex items-center justify-center gap-1">
                                   {canEdit ? (
                                      <>
                                         <button onClick={() => handleEditSchedule(schedule)} className={`p-1.5 rounded-lg transition-colors ${isBeingEdited ? 'text-amber-600 bg-amber-100' : 'text-slate-400 hover:text-blue-600 hover:bg-blue-50'}`} title="Edit"><Pen className="w-4 h-4" /></button>
                                         <button onClick={() => handleDeleteSchedule(schedule.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Hapus"><Trash2 className="w-4 h-4" /></button>
                                      </>
-                                  ) : (<span className="text-xs text-slate-400 italic">Terkunci</span>)}
+                                  ) : (<span className="text-[10px] md:text-xs text-slate-400 italic">Terkunci</span>)}
                                 </div>
                               </td>
                             </tr>
                           );
                         })}
                         {displayedSchedules.length === 0 && (
-                          <tr><td colSpan={isAdmin ? 6 : 5} className="px-6 py-16 text-center text-slate-400">Belum ada jadwal yang {isGuru ? 'Anda ajukan' : 'terdaftar'} untuk tahun ajaran ini.</td></tr>
+                          <tr><td colSpan={isAdmin ? 6 : 5} className="px-4 py-12 text-center text-sm text-slate-400">Belum ada jadwal yang {isGuru ? 'Anda ajukan' : 'terdaftar'} untuk tahun ajaran ini.</td></tr>
                         )}
                       </tbody>
                     </table>
@@ -1109,8 +1106,6 @@
           
           try {
              const { initializeApp, getAuth, createUserWithEmailAndPassword, doc, setDoc } = window.FirebaseSDK;
-             
-             // Gunakan instance terpisah agar Admin tidak ter-logout saat membuat user baru
              const firebaseConfig = { apiKey: "AIzaSyA6s-Dl45Sms932s9EI-Qb4EU2-xnDrTZ4", authDomain: "supervisi-app.firebaseapp.com", projectId: "supervisi-app" };
              const secondaryApp = window.secondaryFirebaseApp || initializeApp(firebaseConfig, "SecondaryApp");
              window.secondaryFirebaseApp = secondaryApp;
@@ -1119,11 +1114,10 @@
              let newId = Date.now().toString();
              try {
                 const userCred = await createUserWithEmailAndPassword(secondaryAuth, email, newTeacherPassword);
-                newId = userCred.user.uid; // Kunci: ID Guru di Firestore = UID di Firebase Auth
+                newId = userCred.user.uid; 
              } catch(err) {
                 if (err.code === 'auth/email-already-in-use') {
-                   alert('Peringatan: Username ini sudah pernah didaftarkan di sistem Auth. Silakan gunakan username lain.');
-                   return;
+                   alert('Peringatan: Username ini sudah pernah didaftarkan. Gunakan username lain.'); return;
                 } else { throw err; }
              }
              await secondaryAuth.signOut();
@@ -1169,15 +1163,15 @@
         }, [newTeacherName]);
 
         return (
-          <div className="p-8 max-w-7xl mx-auto animate-in fade-in duration-300">
-            <div className="mb-8 flex flex-col md:flex-row justify-between md:items-end gap-4">
+          <div className="p-4 md:p-8 max-w-7xl mx-auto animate-in fade-in duration-300">
+            <div className="mb-6 md:mb-8 flex flex-col md:flex-row justify-between md:items-end gap-4">
               <div>
-                <h2 className="text-3xl font-bold text-slate-800 tracking-tight">Manajemen Guru & Akun</h2>
-                <p className="text-slate-500 mt-1">Kelola data guru, buatkan akun login, dan lakukan verifikasi supervisi ({selectedYear}).</p>
+                <h2 className="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">Manajemen Guru & Akun</h2>
+                <p className="text-sm md:text-base text-slate-500 mt-1">Kelola data guru, buatkan akun, dan verifikasi ({selectedYear}).</p>
               </div>
-              <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
-                <FolderOpen className="w-5 h-5 text-slate-400 ml-2" />
-                <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="bg-transparent text-slate-700 font-medium py-2 px-4 focus:outline-none cursor-pointer appearance-none pr-8">
+              <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-sm w-full md:w-auto">
+                <FolderOpen className="w-5 h-5 text-slate-400 ml-2 shrink-0" />
+                <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="bg-transparent text-slate-700 font-medium py-2 px-2 md:px-4 focus:outline-none cursor-pointer appearance-none pr-8 w-full">
                   {schoolInfo.availableYears && schoolInfo.availableYears.map(year => (
                     <option key={year} value={year}>{year}</option>
                   ))}
@@ -1186,38 +1180,38 @@
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col mb-8">
-              <div className="p-6 border-b border-slate-100 bg-slate-50/50">
-                <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-4">
+              <div className="p-4 md:p-6 border-b border-slate-100 bg-slate-50/50">
+                <h3 className="text-base md:text-lg font-bold text-slate-800 flex items-center gap-2 mb-4">
                   <UserCircle className="w-5 h-5 text-indigo-500" /> Tambah Guru & Buat Akun
                 </h3>
-                <form onSubmit={handleAddTeacher} className="flex flex-col md:flex-row gap-4 items-end">
-                  <div className="flex-1 w-full">
+                <form onSubmit={handleAddTeacher} className="flex flex-col md:flex-row gap-3 md:gap-4 items-start md:items-end">
+                  <div className="w-full flex-1">
                      <label className="block text-xs font-bold text-slate-500 mb-1">Nama Lengkap</label>
-                     <input type="text" value={newTeacherName} onChange={(e) => setNewTeacherName(e.target.value)} placeholder="Nama Lengkap Guru..." className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-colors text-sm" required />
+                     <input type="text" value={newTeacherName} onChange={(e) => setNewTeacherName(e.target.value)} placeholder="Nama Lengkap..." className="w-full px-3 md:px-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-colors text-sm" required />
                   </div>
                   <div className="w-full md:w-48">
                      <label className="block text-xs font-bold text-slate-500 mb-1">Username Login</label>
-                     <input type="text" value={newTeacherUsername} onChange={(e) => setNewTeacherUsername(e.target.value)} placeholder="username..." className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-colors text-sm" required />
+                     <input type="text" value={newTeacherUsername} onChange={(e) => setNewTeacherUsername(e.target.value)} placeholder="username..." className="w-full px-3 md:px-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-colors text-sm" required />
                   </div>
-                  <div className="w-full md:w-40">
+                  <div className="w-full md:w-32">
                      <label className="block text-xs font-bold text-slate-500 mb-1">Password</label>
-                     <input type="text" value={newTeacherPassword} onChange={(e) => setNewTeacherPassword(e.target.value)} placeholder="Password..." className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-colors text-sm" required />
+                     <input type="text" value={newTeacherPassword} onChange={(e) => setNewTeacherPassword(e.target.value)} placeholder="Pass..." className="w-full px-3 md:px-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-colors text-sm" required />
                   </div>
-                  <button type="submit" className="w-full md:w-auto bg-indigo-600 text-white px-6 py-2 rounded-xl hover:bg-indigo-700 transition flex items-center justify-center gap-2 text-sm font-medium h-[38px]">
+                  <button type="submit" className="w-full md:w-auto bg-indigo-600 text-white px-6 py-2 rounded-xl hover:bg-indigo-700 transition flex items-center justify-center gap-2 text-sm font-medium h-[38px] mt-2 md:mt-0">
                     <Plus className="w-4 h-4" /> Tambah
                   </button>
                 </form>
               </div>
               
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
+              <div className="overflow-x-auto w-full">
+                <table className="w-full text-left border-collapse min-w-[700px]">
                   <thead>
                     <tr className="bg-slate-50 text-slate-500 text-sm border-b border-slate-200">
-                      <th className="px-6 py-4 font-semibold w-16 text-center">No</th>
-                      <th className="px-6 py-4 font-semibold min-w-[200px]">Data Guru & Akun</th>
-                      <th className="px-6 py-4 font-semibold w-48 text-center">Progres Terverifikasi</th>
-                      <th className="px-6 py-4 font-semibold w-40 text-center">Status</th>
-                      <th className="px-6 py-4 font-semibold min-w-[150px] text-center">Verifikasi</th>
+                      <th className="px-4 py-4 font-semibold w-12 text-center whitespace-nowrap">No</th>
+                      <th className="px-4 py-4 font-semibold min-w-[200px]">Data Guru & Akun</th>
+                      <th className="px-4 py-4 font-semibold w-48 text-center whitespace-nowrap">Progres Verifikasi</th>
+                      <th className="px-4 py-4 font-semibold w-32 text-center whitespace-nowrap">Status</th>
+                      <th className="px-4 py-4 font-semibold min-w-[140px] text-center">Aksi</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -1226,10 +1220,10 @@
                       const isComplete = prog.percentage === 100;
                       return (
                         <tr key={t.id} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-6 py-4 text-center text-slate-500">{index + 1}</td>
-                          <td className="px-6 py-4">
+                          <td className="px-4 py-3 text-center text-slate-500 text-sm">{index + 1}</td>
+                          <td className="px-4 py-3">
                             {editingId === t.id ? (
-                              <form onSubmit={handleSaveEdit} className="flex flex-col gap-2 bg-slate-50 p-3 rounded-lg border border-indigo-100">
+                              <form onSubmit={handleSaveEdit} className="flex flex-col gap-2 bg-slate-50 p-2 rounded-lg border border-indigo-100 w-full max-w-xs">
                                 <div><label className="text-xs font-semibold text-slate-500">Nama:</label><input autoFocus type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full px-2 py-1 border border-indigo-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm" /></div>
                                 <div className="flex gap-2">
                                   <div className="flex-1"><label className="text-xs font-semibold text-slate-500">User:</label><input type="text" value={editUsername} onChange={(e) => setEditUsername(e.target.value)} className="w-full px-2 py-1 border border-indigo-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm" /></div>
@@ -1242,35 +1236,35 @@
                               </form>
                             ) : (
                               <div>
-                                 <span className="font-bold text-slate-800 block">{t.name}</span>
-                                 <span className="text-xs text-slate-500 flex items-center gap-1 mt-1"><Key className="w-3 h-3"/> User: <strong>{t.username}</strong> | Pass: {t.password}</span>
+                                 <span className="font-bold text-slate-800 block text-sm">{t.name}</span>
+                                 <span className="text-xs text-slate-500 flex items-center gap-1 mt-1"><Key className="w-3 h-3 shrink-0"/> User: <strong>{t.username}</strong> | Pass: {t.password}</span>
                               </div>
                             )}
                           </td>
-                          <td className="px-6 py-4 text-center">
+                          <td className="px-4 py-3 text-center">
                             <div className="flex flex-col items-center justify-center gap-1">
                               <div className="flex items-center gap-2 w-full justify-center">
-                                <div className="w-24 bg-slate-200 rounded-full h-2 overflow-hidden">
+                                <div className="w-20 md:w-24 bg-slate-200 rounded-full h-2 overflow-hidden">
                                   <div className={`h-2 rounded-full ${isComplete ? 'bg-emerald-500' : 'bg-indigo-500'}`} style={{ width: `${prog.percentage}%` }}></div>
                                 </div>
                                 <span className="text-xs font-semibold text-slate-600 w-8">{prog.percentage}%</span>
                               </div>
-                              {prog.isPendingVerif && <span className="text-[10px] bg-amber-100 text-amber-700 px-2 rounded-full font-bold">Ada Pengajuan Baru</span>}
+                              {prog.isPendingVerif && <span className="text-[9px] md:text-[10px] bg-amber-100 text-amber-700 px-2 rounded-full font-bold whitespace-nowrap">Ada Pengajuan Baru</span>}
                             </div>
                           </td>
-                          <td className="px-6 py-4 text-center">
+                          <td className="px-4 py-3 text-center">
                             {prog.percentage === 0 ? (
-                               <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-medium">Belum Verifikasi</span>
+                               <span className="inline-flex items-center px-2 py-1 rounded-full bg-slate-100 text-slate-600 text-[10px] md:text-xs font-medium whitespace-nowrap">Belum Mulai</span>
                             ) : isComplete ? (
-                               <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 text-xs font-medium">Selesai 100%</span>
+                               <span className="inline-flex items-center px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 text-[10px] md:text-xs font-medium whitespace-nowrap">Selesai 100%</span>
                             ) : (
-                               <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100 text-xs font-medium">Proses Verifikasi</span>
+                               <span className="inline-flex items-center px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100 text-[10px] md:text-xs font-medium whitespace-nowrap">Proses Verifikasi</span>
                             )}
                           </td>
-                          <td className="px-6 py-4 text-center">
-                            <div className="flex items-center justify-center gap-2">
-                              <button onClick={() => openSupervision(t)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${prog.isPendingVerif ? 'bg-amber-500 text-white border-amber-600 hover:bg-amber-600 shadow-md animate-pulse' : 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-600 hover:text-white'}`}>
-                                <ClipboardList className="w-3.5 h-3.5" /> {prog.isPendingVerif ? 'Verifikasi' : 'Buka Data'}
+                          <td className="px-4 py-3 text-center">
+                            <div className="flex items-center justify-center gap-1.5 md:gap-2">
+                              <button onClick={() => openSupervision(t)} className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors border ${prog.isPendingVerif ? 'bg-amber-500 text-white border-amber-600 hover:bg-amber-600 shadow-md animate-pulse' : 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-600 hover:text-white'}`}>
+                                <ClipboardList className="w-3.5 h-3.5" /> <span className="hidden md:inline">{prog.isPendingVerif ? 'Verifikasi' : 'Buka Data'}</span>
                               </button>
                               {!editingId && (
                                 <>
@@ -1284,7 +1278,7 @@
                       );
                     })}
                     {currentTeachers.length === 0 && (
-                      <tr><td colSpan="5" className="px-6 py-12 text-center text-slate-400">Belum ada data guru di tahun ajaran ini. Silakan tambahkan di atas.</td></tr>
+                      <tr><td colSpan="5" className="px-4 py-12 text-center text-sm text-slate-400">Belum ada data guru di tahun ajaran ini.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -1385,15 +1379,15 @@
         };
 
         return (
-          <div className="p-8 max-w-4xl mx-auto animate-in fade-in duration-300">
-            <div className="mb-8 flex flex-col md:flex-row justify-between md:items-end gap-4">
+          <div className="p-4 md:p-8 max-w-4xl mx-auto animate-in fade-in duration-300">
+            <div className="mb-6 md:mb-8 flex flex-col md:flex-row justify-between md:items-end gap-4">
               <div>
-                <h2 className="text-3xl font-bold text-slate-800 tracking-tight">Kategori Supervisi</h2>
-                <p className="text-slate-500 mt-1">Kelola daftar tahapan beserta rincian checklist dan bobot penilaiannya.</p>
+                <h2 className="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">Kategori Supervisi</h2>
+                <p className="text-sm md:text-base text-slate-500 mt-1">Kelola daftar tahapan beserta rincian checklist dan bobotnya.</p>
               </div>
-              <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
-                <FolderOpen className="w-5 h-5 text-slate-400 ml-2" />
-                <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="bg-transparent text-slate-700 font-medium py-2 px-4 focus:outline-none cursor-pointer appearance-none pr-8">
+              <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-sm w-full md:w-auto">
+                <FolderOpen className="w-5 h-5 text-slate-400 ml-2 shrink-0" />
+                <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="bg-transparent text-slate-700 font-medium py-2 px-2 md:px-4 focus:outline-none cursor-pointer appearance-none pr-8 w-full">
                   {schoolInfo.availableYears && schoolInfo.availableYears.map(year => (
                     <option key={year} value={year}>{year}</option>
                   ))}
@@ -1401,59 +1395,60 @@
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[600px] mb-10">
-              <div className="p-6 border-b border-slate-100 bg-slate-50/50">
-                <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[500px] mb-8">
+              <div className="p-4 md:p-6 border-b border-slate-100 bg-slate-50/50">
+                <h3 className="text-base md:text-lg font-bold text-slate-800 flex items-center gap-2">
                   <Activity className="w-5 h-5 text-indigo-500" /> Daftar Tahapan / Kategori ({selectedYear})
                 </h3>
               </div>
-              <div className="p-6 flex-1 overflow-y-auto">
-                <form onSubmit={handleAddCategory} className="flex flex-col md:flex-row gap-2 mb-8">
-                  <input type="text" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} placeholder="Misal: Administrasi Pembelajaran" className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:bg-white" required />
-                  <input type="number" step="0.1" value={newCategoryWeight} onChange={(e) => setNewCategoryWeight(e.target.value)} placeholder="Bobot (%)" className="w-full md:w-32 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:bg-white" required />
-                  <button type="submit" className="bg-indigo-600 text-white px-6 py-3 rounded-xl hover:bg-indigo-700 font-medium whitespace-nowrap">Tambah</button>
+              <div className="p-4 md:p-6 flex-1 overflow-y-auto">
+                <form onSubmit={handleAddCategory} className="flex flex-col sm:flex-row gap-3 mb-6 md:mb-8">
+                  <input type="text" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} placeholder="Nama Kategori (Misal: RPP)" className="flex-1 w-full px-4 py-2.5 md:py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm md:text-base" required />
+                  <input type="number" step="0.1" value={newCategoryWeight} onChange={(e) => setNewCategoryWeight(e.target.value)} placeholder="Bobot %" className="w-full sm:w-28 px-4 py-2.5 md:py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm md:text-base" required />
+                  <button type="submit" className="w-full sm:w-auto bg-indigo-600 text-white px-6 py-2.5 md:py-3 rounded-xl hover:bg-indigo-700 font-medium whitespace-nowrap transition">Tambah</button>
                 </form>
                 
                 <div className="space-y-4">
                   {currentCategories.map((c, index) => (
                     <div key={c.id} className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
-                      <div className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-slate-50 border-b border-slate-100 gap-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-slate-50 border-b border-slate-100 gap-3">
                         
                         {editingCategoryId === c.id ? (
-                          <form onSubmit={(e) => handleSaveEditCategory(e, c.id)} className="flex-1 flex flex-col md:flex-row items-center gap-2">
-                             <span className="flex items-center justify-center w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 font-bold shrink-0">{index + 1}</span>
-                             <input autoFocus type="text" value={editCategoryName} onChange={(e) => setEditCategoryName(e.target.value)} placeholder="Nama Kategori" className="flex-1 w-full px-3 py-1.5 border border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" required />
-                             <input type="number" step="0.1" value={editCategoryWeight} onChange={(e) => setEditCategoryWeight(e.target.value)} placeholder="Bobot" className="w-24 px-3 py-1.5 border border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" required />
-                             <div className="flex gap-1 shrink-0">
-                               <button type="submit" className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 p-2 rounded-lg transition-colors"><Save className="w-4 h-4" /></button>
-                               <button type="button" onClick={() => setEditingCategoryId(null)} className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors"><X className="w-4 h-4" /></button>
+                          <form onSubmit={(e) => handleSaveEditCategory(e, c.id)} className="flex-1 flex flex-col sm:flex-row items-center gap-2 w-full">
+                             <div className="flex gap-2 w-full">
+                               <input autoFocus type="text" value={editCategoryName} onChange={(e) => setEditCategoryName(e.target.value)} placeholder="Nama Kategori" className="flex-1 px-3 py-2 border border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" required />
+                               <input type="number" step="0.1" value={editCategoryWeight} onChange={(e) => setEditCategoryWeight(e.target.value)} placeholder="Bobot" className="w-20 px-3 py-2 border border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" required />
+                             </div>
+                             <div className="flex gap-1 shrink-0 self-end sm:self-auto w-full sm:w-auto justify-end">
+                               <button type="submit" className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 p-2 rounded-lg transition-colors bg-emerald-50 sm:bg-transparent"><Save className="w-4 h-4" /></button>
+                               <button type="button" onClick={() => setEditingCategoryId(null)} className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors bg-slate-200 sm:bg-transparent"><X className="w-4 h-4" /></button>
                              </div>
                           </form>
                         ) : (
-                          <div className="flex items-center gap-4 flex-1">
-                            <span className="flex items-center justify-center w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 font-bold shrink-0">{index + 1}</span>
+                          <div className="flex items-start sm:items-center gap-3 flex-1">
+                            <span className="flex items-center justify-center w-7 h-7 md:w-8 md:h-8 rounded-full bg-indigo-100 text-indigo-700 font-bold shrink-0 text-xs md:text-sm">{index + 1}</span>
                             <div>
-                              <span className="font-bold text-slate-800 block">{c.name}</span>
-                              <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 inline-block mt-1">Bobot Kategori: {c.weight || 0}%</span>
+                              <span className="font-bold text-slate-800 block text-sm md:text-base leading-tight md:leading-normal">{c.name}</span>
+                              <span className="text-[10px] md:text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 inline-block mt-1 md:mt-0.5">Bobot: {c.weight || 0}%</span>
                             </div>
                           </div>
                         )}
 
                         {editingCategoryId !== c.id && (
-                          <div className="flex gap-2 self-start md:self-center shrink-0">
-                             <button onClick={() => setActiveSubFormId(activeSubFormId === c.id ? null : c.id)} className="text-indigo-600 hover:bg-indigo-100 px-3 py-1 rounded-lg text-sm font-medium border border-indigo-200 bg-white">
-                               <Plus className="w-3.5 h-3.5 mr-1 inline" /> Sub Checklist
+                          <div className="flex gap-2 self-start sm:self-center shrink-0 w-full sm:w-auto mt-2 sm:mt-0 justify-end">
+                             <button onClick={() => setActiveSubFormId(activeSubFormId === c.id ? null : c.id)} className="flex-1 sm:flex-none justify-center text-indigo-600 hover:bg-indigo-100 px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium border border-indigo-200 bg-white flex items-center">
+                               <Plus className="w-3.5 h-3.5 mr-1" /> Sub Item
                              </button>
-                             <button onClick={() => handleStartEditCategory(c)} className="text-slate-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-blue-50 transition-all"><Pen className="w-4 h-4" /></button>
-                             <button onClick={() => handleDeleteCategory(c.id)} className="text-slate-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-all"><Trash2 className="w-4 h-4" /></button>
+                             <button onClick={() => handleStartEditCategory(c)} className="text-slate-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-blue-50 transition-all border border-transparent sm:border-slate-200"><Pen className="w-4 h-4" /></button>
+                             <button onClick={() => handleDeleteCategory(c.id)} className="text-slate-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-all border border-transparent sm:border-slate-200"><Trash2 className="w-4 h-4" /></button>
                           </div>
                         )}
                       </div>
 
-                      <div className="p-4">
+                      <div className="p-3 md:p-4">
                         {(!c.subCategories || c.subCategories.length === 0) ? (
-                          <div className="text-sm text-slate-400 italic px-4 py-2 bg-slate-50 rounded-lg border border-dashed border-slate-200">
-                            Tidak ada sub-checklist. Kategori ini dinilai sebagai 1 item langsung.
+                          <div className="text-xs md:text-sm text-slate-400 italic px-4 py-2.5 bg-slate-50 rounded-lg border border-dashed border-slate-200 text-center sm:text-left">
+                            Tidak ada sub-item. Menjadi 1 penilaian langsung.
                           </div>
                         ) : (
                           <ul className="space-y-2">
@@ -1461,25 +1456,25 @@
                               const isEditingThisSub = editingSubCategory.parentId === c.id && editingSubCategory.subId === sub.id;
 
                               return (
-                                <li key={sub.id} className={`flex items-center justify-between p-3 rounded-lg border hover:border-slate-300 transition-colors bg-white group ml-4 ${isEditingThisSub ? 'border-indigo-300 ring-2 ring-indigo-50' : 'border-slate-100'}`}>
+                                <li key={sub.id} className={`flex flex-col sm:flex-row sm:items-center justify-between p-2.5 md:p-3 rounded-lg border hover:border-slate-300 transition-colors bg-white group sm:ml-4 gap-2 ${isEditingThisSub ? 'border-indigo-300 ring-2 ring-indigo-50' : 'border-slate-100'}`}>
                                   {isEditingThisSub ? (
                                      <form onSubmit={(e) => handleSaveEditSubCategory(e, c.id, sub.id)} className="flex-1 flex items-center gap-2 w-full">
-                                        <LevelDownAlt className="w-4 h-4 text-slate-300 shrink-0" />
-                                        <input autoFocus type="text" value={editSubCategoryName} onChange={(e) => setEditSubCategoryName(e.target.value)} className="flex-1 px-3 py-1.5 border border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" required />
+                                        <LevelDownAlt className="w-4 h-4 text-slate-300 shrink-0 hidden sm:block" />
+                                        <input autoFocus type="text" value={editSubCategoryName} onChange={(e) => setEditSubCategoryName(e.target.value)} className="flex-1 w-full px-3 py-1.5 border border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" required />
                                         <div className="flex gap-1 shrink-0">
-                                          <button type="submit" className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 p-1.5 rounded-lg transition-colors"><Save className="w-4 h-4" /></button>
-                                          <button type="button" onClick={() => setEditingSubCategory({parentId: null, subId: null})} className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition-colors"><X className="w-4 h-4" /></button>
+                                          <button type="submit" className="text-emerald-600 hover:bg-emerald-50 p-1.5 rounded-lg transition-colors"><Save className="w-4 h-4" /></button>
+                                          <button type="button" onClick={() => setEditingSubCategory({parentId: null, subId: null})} className="text-slate-400 hover:bg-red-50 p-1.5 rounded-lg transition-colors"><X className="w-4 h-4" /></button>
                                         </div>
                                      </form>
                                   ) : (
                                      <>
-                                        <div className="flex items-center gap-3 flex-1">
-                                          <LevelDownAlt className="w-4 h-4 text-slate-300 shrink-0" />
-                                          <span className="text-slate-700">{sub.name}</span>
+                                        <div className="flex items-start sm:items-center gap-2 sm:gap-3 flex-1">
+                                          <LevelDownAlt className="w-4 h-4 text-slate-300 shrink-0 mt-0.5 sm:mt-0" />
+                                          <span className="text-slate-700 text-sm leading-snug">{sub.name}</span>
                                         </div>
-                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                          <button onClick={() => handleStartEditSubCategory(c.id, sub)} className="text-slate-300 hover:text-blue-500 p-1.5 rounded-lg transition-colors"><Pen className="w-4 h-4" /></button>
-                                          <button onClick={() => handleDeleteSubCategory(c.id, sub.id)} className="text-slate-300 hover:text-red-500 p-1.5 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+                                        <div className="flex gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity self-end sm:self-auto bg-slate-50 sm:bg-transparent rounded-lg p-0.5">
+                                          <button onClick={() => handleStartEditSubCategory(c.id, sub)} className="text-slate-400 hover:text-blue-500 p-1.5 rounded-lg transition-colors"><Pen className="w-3.5 h-3.5" /></button>
+                                          <button onClick={() => handleDeleteSubCategory(c.id, sub.id)} className="text-slate-400 hover:text-red-500 p-1.5 rounded-lg transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                                         </div>
                                      </>
                                   )}
@@ -1490,17 +1485,19 @@
                         )}
 
                         {activeSubFormId === c.id && (
-                          <form onSubmit={(e) => handleAddSubCategory(e, c.id)} className="mt-3 ml-4 flex gap-2 animate-in fade-in slide-in-from-top-1">
-                            <input autoFocus type="text" value={newSubCategoryName} onChange={(e) => setNewSubCategoryName(e.target.value)} placeholder="Contoh: RPP, Silabus..." className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm" required />
-                            <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition text-sm font-medium">Simpan</button>
-                            <button type="button" onClick={() => setActiveSubFormId(null)} className="bg-slate-200 text-slate-600 px-3 py-2 rounded-lg hover:bg-slate-300 transition text-sm"><X className="w-4 h-4" /></button>
+                          <form onSubmit={(e) => handleAddSubCategory(e, c.id)} className="mt-3 sm:ml-4 flex flex-col sm:flex-row gap-2 animate-in fade-in slide-in-from-top-1">
+                            <input autoFocus type="text" value={newSubCategoryName} onChange={(e) => setNewSubCategoryName(e.target.value)} placeholder="Nama Sub-item..." className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm" required />
+                            <div className="flex gap-2">
+                               <button type="submit" className="flex-1 sm:flex-none justify-center bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition text-sm font-medium">Simpan</button>
+                               <button type="button" onClick={() => setActiveSubFormId(null)} className="bg-slate-200 text-slate-600 px-3 py-2 rounded-lg hover:bg-slate-300 transition text-sm"><X className="w-4 h-4" /></button>
+                            </div>
                           </form>
                         )}
                       </div>
                     </div>
                   ))}
                   {currentCategories.length === 0 && (
-                     <div className="text-center p-10 border-2 border-dashed border-slate-200 rounded-xl text-slate-400">
+                     <div className="text-center p-8 md:p-10 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 text-sm md:text-base">
                         Belum ada kategori supervisi di tahun ajaran ini.
                      </div>
                   )}
@@ -1517,15 +1514,15 @@
         const [selectedTeacherId, setSelectedTeacherId] = useState('');
 
         return (
-          <div className="p-8 max-w-5xl mx-auto animate-in fade-in duration-300">
-            <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div className="p-4 md:p-8 max-w-5xl mx-auto animate-in fade-in duration-300">
+            <div className="mb-6 md:mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div>
-                <h2 className="text-3xl font-bold text-slate-800 tracking-tight">Cetak Laporan</h2>
-                <p className="text-slate-500 mt-1">Ekspor dan cetak hasil supervisi akademik dalam format resmi.</p>
+                <h2 className="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">Cetak Laporan</h2>
+                <p className="text-sm md:text-base text-slate-500 mt-1">Ekspor dan cetak hasil supervisi dalam format resmi.</p>
               </div>
-              <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
-                <FolderOpen className="w-5 h-5 text-slate-400 ml-2" />
-                <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="bg-transparent text-slate-700 font-medium py-2 px-4 focus:outline-none cursor-pointer appearance-none pr-8">
+              <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-sm w-full md:w-auto">
+                <FolderOpen className="w-5 h-5 text-slate-400 ml-2 shrink-0" />
+                <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="bg-transparent text-slate-700 font-medium py-2 px-2 md:px-4 focus:outline-none cursor-pointer appearance-none pr-8 w-full">
                   {schoolInfo.availableYears && schoolInfo.availableYears.map(year => (
                     <option key={year} value={year}>{year}</option>
                   ))}
@@ -1533,55 +1530,55 @@
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className={`bg-white rounded-2xl border ${reportMode === 'all' ? 'border-indigo-400 shadow-md ring-2 ring-indigo-50' : 'border-slate-200 shadow-sm'} p-6 transition-all cursor-pointer`} onClick={() => setReportMode('all')}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
+              <div className={`bg-white rounded-2xl border ${reportMode === 'all' ? 'border-indigo-400 shadow-md ring-2 ring-indigo-50' : 'border-slate-200 shadow-sm'} p-5 md:p-6 transition-all cursor-pointer`} onClick={() => setReportMode('all')}>
                 <div className="flex items-start gap-4 mb-4">
-                  <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${reportMode === 'all' ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-500'}`}>
-                     <Users className="w-6 h-6" />
+                  <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center shrink-0 ${reportMode === 'all' ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-500'}`}>
+                     <Users className="w-5 h-5 md:w-6 md:h-6" />
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-slate-800">Laporan Keseluruhan</h3>
-                    <p className="text-sm text-slate-500 mt-1">Cetak laporan rekapitulasi progres seluruh guru dalam satu dokumen.</p>
+                    <h3 className="text-lg md:text-xl font-bold text-slate-800">Laporan Keseluruhan</h3>
+                    <p className="text-xs md:text-sm text-slate-500 mt-1">Cetak rekapitulasi seluruh guru dalam satu dokumen.</p>
                   </div>
                 </div>
                 
                 {reportMode === 'all' && (
-                  <div className="mt-6 space-y-3 pt-6 border-t border-slate-100 animate-in fade-in slide-in-from-top-2">
-                    <button onClick={handleExportPDF} disabled={currentTeachers.length === 0} className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-3 rounded-xl hover:bg-indigo-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed">
-                      <FileText className="w-5 h-5" /> Cetak PDF (Format Resmi)
+                  <div className="mt-4 md:mt-6 space-y-3 pt-4 md:pt-6 border-t border-slate-100 animate-in fade-in slide-in-from-top-2">
+                    <button onClick={handleExportPDF} disabled={currentTeachers.length === 0} className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-3 rounded-xl hover:bg-indigo-700 transition font-medium text-sm md:text-base disabled:opacity-50">
+                      <FileText className="w-5 h-5" /> Cetak PDF Resmi
                     </button>
-                    <button onClick={handleExportCSV} disabled={currentTeachers.length === 0} className="w-full flex items-center justify-center gap-2 bg-white text-slate-700 border border-slate-200 px-4 py-3 rounded-xl hover:bg-slate-50 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed">
-                      <Download className="w-5 h-5" /> Unduh Data CSV (Excel)
+                    <button onClick={handleExportCSV} disabled={currentTeachers.length === 0} className="w-full flex items-center justify-center gap-2 bg-white text-slate-700 border border-slate-200 px-4 py-3 rounded-xl hover:bg-slate-50 transition font-medium text-sm md:text-base disabled:opacity-50">
+                      <Download className="w-5 h-5" /> Unduh File CSV
                     </button>
                   </div>
                 )}
               </div>
 
-              <div className={`bg-white rounded-2xl border ${reportMode === 'individual' ? 'border-indigo-400 shadow-md ring-2 ring-indigo-50' : 'border-slate-200 shadow-sm'} p-6 transition-all cursor-pointer`} onClick={() => setReportMode('individual')}>
+              <div className={`bg-white rounded-2xl border ${reportMode === 'individual' ? 'border-indigo-400 shadow-md ring-2 ring-indigo-50' : 'border-slate-200 shadow-sm'} p-5 md:p-6 transition-all cursor-pointer`} onClick={() => setReportMode('individual')}>
                 <div className="flex items-start gap-4 mb-4">
-                  <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${reportMode === 'individual' ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-500'}`}>
-                     <UserCircle className="w-6 h-6" />
+                  <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center shrink-0 ${reportMode === 'individual' ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-500'}`}>
+                     <UserCircle className="w-5 h-5 md:w-6 md:h-6" />
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-slate-800">Laporan Per Guru</h3>
-                    <p className="text-sm text-slate-500 mt-1">Cetak lembar hasil supervisi individual lengkap dengan rincian tahapannya.</p>
+                    <h3 className="text-lg md:text-xl font-bold text-slate-800">Laporan Per Guru</h3>
+                    <p className="text-xs md:text-sm text-slate-500 mt-1">Cetak lembar supervisi individual rincian tahapan.</p>
                   </div>
                 </div>
 
                 {reportMode === 'individual' && (
-                  <div className="mt-6 pt-6 border-t border-slate-100 animate-in fade-in slide-in-from-top-2">
+                  <div className="mt-4 md:mt-6 pt-4 md:pt-6 border-t border-slate-100 animate-in fade-in slide-in-from-top-2">
                     <label className="block text-sm font-semibold text-slate-700 mb-2">Pilih Guru:</label>
                     <select 
                       value={selectedTeacherId} 
                       onChange={(e) => setSelectedTeacherId(e.target.value)}
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 mb-4"
+                      className="w-full px-3 md:px-4 py-2.5 md:py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 mb-4 text-sm"
                     >
                       <option value="">-- Pilih Guru --</option>
                       {currentTeachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                     </select>
                     
-                    <button onClick={() => handleExportPDFPerTeacher(selectedTeacherId)} disabled={!selectedTeacherId} className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-3 rounded-xl hover:bg-indigo-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed">
-                      <Printer className="w-5 h-5" /> Cetak Laporan Guru (PDF)
+                    <button onClick={() => handleExportPDFPerTeacher(selectedTeacherId)} disabled={!selectedTeacherId} className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-3 rounded-xl hover:bg-indigo-700 transition font-medium text-sm md:text-base disabled:opacity-50">
+                      <Printer className="w-5 h-5" /> Cetak Laporan Guru
                     </button>
                   </div>
                 )}
@@ -1589,9 +1586,9 @@
             </div>
             
             {!schoolInfo.wakasekName && (
-              <div className="mt-8 bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+              <div className="mt-6 md:mt-8 bg-amber-50 border border-amber-200 rounded-xl p-3 md:p-4 flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                <p className="text-sm text-amber-800">Anda belum mengisi nama <strong>Wakasek Kurikulum</strong> di menu Profil Sekolah. Tanda tangan pada dokumen PDF yang dicetak akan kosong. <button onClick={() => setActiveTab('school')} className="underline font-semibold hover:text-amber-900">Isi sekarang</button>.</p>
+                <p className="text-xs md:text-sm text-amber-800 leading-relaxed">Nama <strong>Wakasek Kurikulum</strong> belum diisi di menu Profil Sekolah. Tanda tangan pada dokumen PDF cetak akan kosong. <button onClick={() => setActiveTab('school')} className="underline font-semibold hover:text-amber-900">Isi sekarang</button>.</p>
               </div>
             )}
           </div>
@@ -1627,11 +1624,9 @@
             
             try {
                const { doc, setDoc } = window.FirebaseSDK;
-               // Update school year list
                await setDoc(doc(db, "schoolInfo", "main"), newSchoolData);
 
                if(copyFromCurrent) {
-                  // Generate batch of promises for copying records to new year
                   const teacherPromises = currentTeachers.map(t => {
                      const newId = 'T' + Date.now() + Math.random().toString(36).substring(2, 9);
                      return setDoc(doc(db, "teachers", newId), { ...t, id: newId, academicYear: formattedYear });
@@ -1641,7 +1636,7 @@
                      return setDoc(doc(db, "categories", newId), { ...c, id: newId, academicYear: formattedYear });
                   });
                   await Promise.all([...teacherPromises, ...catPromises]);
-                  alert(`Berhasil membuat tahun ${formattedYear} dan menyalin ${currentTeachers.length} Guru beserta Kategori ke Firebase.`);
+                  alert(`Berhasil membuat tahun ${formattedYear} dan menyalin ${currentTeachers.length} Guru beserta Kategori.`);
                } else {
                   alert(`Berhasil membuat tahun ${formattedYear} dengan data kosong.`);
                }
@@ -1663,59 +1658,59 @@
         };
 
         return (
-          <div className="p-8 max-w-4xl mx-auto animate-in fade-in duration-300">
-            <div className="mb-8">
-              <h2 className="text-3xl font-bold text-slate-800 tracking-tight">Profil Sekolah</h2>
-              <p className="text-slate-500 mt-1">Kelola informasi dasar, identitas, pejabat, dan daftar tahun ajaran sekolah.</p>
+          <div className="p-4 md:p-8 max-w-4xl mx-auto animate-in fade-in duration-300">
+            <div className="mb-6 md:mb-8">
+              <h2 className="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">Profil Sekolah</h2>
+              <p className="text-sm md:text-base text-slate-500 mt-1">Kelola informasi identitas, pejabat, dan daftar tahun ajaran.</p>
             </div>
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 md:p-6">
               <form onSubmit={handleSaveSchool} className="space-y-6">
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2">Nama Sekolah</label>
-                  <input type="text" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50" placeholder="Contoh: SMA Negeri 1 Maju Bangsa" required />
+                  <input type="text" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm md:text-base" placeholder="SMA Negeri 1 Maju Bangsa" required />
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2">Alamat Lengkap</label>
-                  <textarea value={formData.address || ''} onChange={e => setFormData({...formData, address: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50" rows="3" placeholder="Jalan, Kota, Provinsi..." required></textarea>
+                  <textarea value={formData.address || ''} onChange={e => setFormData({...formData, address: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm md:text-base" rows="3" placeholder="Jalan, Kota, Provinsi..." required></textarea>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 flex flex-col justify-center">
                     <label className="block text-sm font-semibold text-indigo-900 mb-2">Nama WAKASEK Kurikulum</label>
-                    <input type="text" value={formData.wakasekName || ''} onChange={e => setFormData({...formData, wakasekName: e.target.value})} className="w-full px-4 py-2.5 bg-white border border-indigo-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50" placeholder="Budi Santoso, M.Pd." />
-                    <p className="text-xs text-indigo-600 mt-2">Digunakan untuk kolom tanda tangan pada laporan PDF cetak.</p>
+                    <input type="text" value={formData.wakasekName || ''} onChange={e => setFormData({...formData, wakasekName: e.target.value})} className="w-full px-4 py-2.5 bg-white border border-indigo-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm md:text-base" placeholder="Budi Santoso, M.Pd." />
+                    <p className="text-[10px] md:text-xs text-indigo-600 mt-2 leading-relaxed">Digunakan untuk kolom tanda tangan pada laporan PDF cetak.</p>
                   </div>
                   <div className="space-y-4">
                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                         <label className="block text-sm font-semibold text-slate-700 mb-2">Tahun Ajaran Aktif (Default)</label>
-                        <select value={formData.activeYear || ''} onChange={e => setFormData({...formData, activeYear: e.target.value})} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 mb-4" required>
+                        <select value={formData.activeYear || ''} onChange={e => setFormData({...formData, activeYear: e.target.value})} className="w-full px-3 md:px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 mb-4 text-sm md:text-base" required>
                            {formData.availableYears && formData.availableYears.map(y => <option key={y} value={y}>{y}</option>)}
                         </select>
                         
                         <label className="block text-sm font-semibold text-slate-700 mb-2 border-t border-slate-200 pt-3">Kelola Daftar Tahun Ajaran</label>
                         <div className="flex gap-2">
-                          <input type="text" value={newYear} onChange={e => setNewYear(e.target.value)} placeholder="Misal: 2027/2028" className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm" />
-                          <button type="button" onClick={handleAddYear} className="bg-slate-800 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-slate-700 transition">Tambah</button>
+                          <input type="text" value={newYear} onChange={e => setNewYear(e.target.value)} placeholder="Misal: 2027/2028" className="flex-1 w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm" />
+                          <button type="button" onClick={handleAddYear} className="bg-slate-800 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-slate-700 transition shrink-0">Tambah</button>
                         </div>
-                        <div className="flex items-center gap-2 mt-2 mb-3 px-1">
-                           <input type="checkbox" id="copyDataCheck" checked={copyFromCurrent} onChange={e => setCopyFromCurrent(e.target.checked)} className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500" />
-                           <label htmlFor="copyDataCheck" className="text-xs text-slate-600 font-medium cursor-pointer leading-tight">Salin Data Guru & Kategori dari Tahun <strong className="text-indigo-600">{selectedYear}</strong> ke Tahun Baru</label>
+                        <div className="flex items-start gap-2 mt-3 mb-3 px-1">
+                           <input type="checkbox" id="copyDataCheck" checked={copyFromCurrent} onChange={e => setCopyFromCurrent(e.target.checked)} className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 mt-0.5 shrink-0" />
+                           <label htmlFor="copyDataCheck" className="text-[10px] md:text-xs text-slate-600 font-medium cursor-pointer leading-tight">Salin Data Guru & Kategori dari Tahun <strong className="text-indigo-600">{selectedYear}</strong> ke Tahun Baru</label>
                         </div>
                         
-                        <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1 bg-white border border-slate-200 rounded-lg min-h-[40px]">
+                        <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1.5 bg-white border border-slate-200 rounded-lg min-h-[40px]">
                           {formData.availableYears && formData.availableYears.map(y => (
-                             <span key={y} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-slate-50 border border-slate-200 shadow-sm text-xs font-medium text-slate-700">
+                             <span key={y} className="inline-flex items-center gap-1.5 px-2 py-1 md:px-2.5 md:py-1.5 rounded-md bg-slate-50 border border-slate-200 shadow-sm text-[10px] md:text-xs font-medium text-slate-700">
                                {y}
-                               <button type="button" onClick={() => handleDeleteYear(y)} className="text-slate-400 hover:text-red-500 transition-colors"><X className="w-3 h-3" /></button>
+                               <button type="button" onClick={() => handleDeleteYear(y)} className="text-slate-400 hover:text-red-500 transition-colors p-0.5"><X className="w-3 h-3 md:w-3.5 md:h-3.5" /></button>
                              </span>
                           ))}
                         </div>
                      </div>
                   </div>
                 </div>
-                <div className="pt-4 flex items-center justify-between border-t border-slate-100 mt-6">
-                  <span className={`text-sm font-medium ${saveMessage.includes('berhasil') ? 'text-emerald-600' : 'text-red-600'}`}>{saveMessage}</span>
-                  <button type="submit" className="px-6 py-3 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 shadow-sm transition flex items-center gap-2">
-                    <Save className="w-5 h-5" /> Simpan Profil & Tahun Ajaran
+                <div className="pt-4 flex flex-col md:flex-row items-center justify-between border-t border-slate-100 mt-6 gap-4">
+                  <span className={`text-xs md:text-sm font-medium w-full text-center md:text-left ${saveMessage.includes('berhasil') ? 'text-emerald-600' : 'text-red-600'}`}>{saveMessage}</span>
+                  <button type="submit" className="w-full md:w-auto px-6 py-3 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 shadow-sm transition flex items-center justify-center gap-2 text-sm md:text-base">
+                    <Save className="w-5 h-5" /> Simpan Profil
                   </button>
                 </div>
               </form>
@@ -1768,13 +1763,9 @@
         const handleSave = async () => {
           const newId = currentData.id || Date.now().toString();
           const newSupervision = {
-            id: newId,
-            teacherId: selectedTeacher.id,
-            academicYear: selectedYear,
-            selfEvaluatedItems: selfCheckedState,
-            verifiedItems: verifiedCheckedState,
-            driveLink: linkState,
-            principalNotes: notesState
+            id: newId, teacherId: selectedTeacher.id, academicYear: selectedYear,
+            selfEvaluatedItems: selfCheckedState, verifiedItems: verifiedCheckedState,
+            driveLink: linkState, principalNotes: notesState
           };
 
           try {
@@ -1785,38 +1776,38 @@
         };
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-in fade-in">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
-              <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                <div>
-                  <h3 className="text-xl font-bold text-slate-800">{isGuru ? 'Formulir Evaluasi Diri' : 'Formulir Verifikasi Supervisi'}</h3>
-                  <p className="text-sm font-semibold text-indigo-600 mt-0.5">Guru: {selectedTeacher.name}</p>
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 md:p-4 animate-in fade-in">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[95vh] md:max-h-[90vh]">
+              <div className="px-4 md:px-6 py-4 md:py-5 border-b border-slate-100 flex justify-between items-start bg-slate-50 shrink-0">
+                <div className="pr-2">
+                  <h3 className="text-lg md:text-xl font-bold text-slate-800 leading-tight">{isGuru ? 'Formulir Evaluasi Diri' : 'Formulir Verifikasi'}</h3>
+                  <p className="text-xs md:text-sm font-semibold text-indigo-600 mt-1">Guru: {selectedTeacher.name}</p>
                 </div>
-                <button onClick={() => setIsSupervisionModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-full transition"><X className="w-5 h-5" /></button>
+                <button onClick={() => setIsSupervisionModalOpen(false)} className="p-1.5 md:p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-full transition shrink-0"><X className="w-5 h-5 md:w-6 md:h-6" /></button>
               </div>
 
-              <div className="p-6 overflow-y-auto flex-1">
+              <div className="p-4 md:p-6 overflow-y-auto flex-1">
                 {isAdmin && (
-                  <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-xl">
-                     <p className="text-sm text-blue-800">
-                        <strong>Petunjuk Admin:</strong> Item yang dicentang dan diajukan oleh guru ditandai dengan label <span className="inline-block text-[10px] bg-blue-200 text-blue-800 px-1.5 py-0.5 rounded font-bold ml-1">Diajukan Guru</span>. Silakan centang kotak utama untuk memverifikasi.
+                  <div className="mb-5 md:mb-6 p-3 md:p-4 bg-blue-50 border border-blue-100 rounded-xl">
+                     <p className="text-xs md:text-sm text-blue-800 leading-relaxed">
+                        <strong>Petunjuk:</strong> Item yang dicentang oleh guru ditandai dengan label <span className="inline-block text-[9px] md:text-[10px] bg-blue-200 text-blue-800 px-1.5 py-0.5 rounded font-bold ml-1">DIAJUKAN</span>. Silakan centang kotak untuk verifikasi.
                      </p>
                   </div>
                 )}
                 {isGuru && (
-                  <div className="mb-6 p-4 bg-amber-50 border border-amber-100 rounded-xl">
-                     <p className="text-sm text-amber-800">
-                        <strong>Petunjuk Guru:</strong> Silakan centang persiapan yang telah Anda lakukan dan sematkan tautan dokumen/RPP Anda di bawah.
+                  <div className="mb-5 md:mb-6 p-3 md:p-4 bg-amber-50 border border-amber-100 rounded-xl">
+                     <p className="text-xs md:text-sm text-amber-800 leading-relaxed">
+                        <strong>Petunjuk:</strong> Centang persiapan yang telah dilakukan dan sematkan tautan dokumen/RPP Anda di bawah.
                      </p>
                   </div>
                 )}
 
                 <div className="mb-6">
-                  <label className="block text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2"><Activity className="w-4 h-4 text-indigo-500" /> Checklist Tahapan Supervisi</label>
+                  <label className="block text-xs md:text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2"><Activity className="w-4 h-4 text-indigo-500" /> Checklist Tahapan Supervisi</label>
                   {currentCategories.length === 0 ? (
-                    <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded-xl border border-amber-100">Kategori supervisi belum ditambahkan di Data Master pada tahun ajaran ini.</p>
+                    <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded-xl border border-amber-100">Kategori supervisi belum ditambahkan di Data Master.</p>
                   ) : (
-                    <div className="space-y-4">
+                    <div className="space-y-3 md:space-y-4">
                       {currentCategories.map(cat => {
                         const hasSubs = cat.subCategories && cat.subCategories.length > 0;
 
@@ -1827,16 +1818,18 @@
                           const handleChange = isGuru ? () => handleToggleSelfSingle(cat.id) : () => handleToggleVerifSingle(cat.id);
 
                           return (
-                            <label key={cat.id} className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all ${isCheckedForInput ? 'border-indigo-400 bg-indigo-50/30' : 'border-slate-200 hover:border-slate-300'}`}>
-                              <div className="flex items-center gap-3">
-                                <div className="relative flex items-center justify-center">
+                            <label key={cat.id} className={`flex items-start md:items-center justify-between p-3 md:p-4 rounded-xl border cursor-pointer transition-all gap-3 ${isCheckedForInput ? 'border-indigo-400 bg-indigo-50/30' : 'border-slate-200 hover:border-slate-300'}`}>
+                              <div className="flex items-start md:items-center gap-3 w-full">
+                                <div className="relative flex items-center justify-center shrink-0 mt-0.5 md:mt-0">
                                   <input type="checkbox" checked={isCheckedForInput} onChange={handleChange} className="w-5 h-5 appearance-none border-2 border-slate-300 rounded-md checked:bg-indigo-600 checked:border-indigo-600 transition-colors cursor-pointer" />
                                   {isCheckedForInput && <CheckCircle className="w-3.5 h-3.5 text-white absolute pointer-events-none" />}
                                 </div>
-                                <span className={`font-semibold ${isCheckedForInput ? 'text-indigo-900' : 'text-slate-700'}`}>{cat.name}</span>
+                                <span className={`text-sm md:text-base font-semibold leading-snug ${isCheckedForInput ? 'text-indigo-900' : 'text-slate-700'}`}>{cat.name}</span>
                               </div>
-                              {isAdmin && isSelfChecked && <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-1 rounded font-bold uppercase tracking-wider">Diajukan Guru</span>}
-                              {isGuru && isVerifChecked && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-1 rounded font-bold uppercase tracking-wider"><CheckCircle className="w-3 h-3 inline mr-1"/>Terverifikasi</span>}
+                              <div className="flex flex-col gap-1 items-end shrink-0">
+                                {isAdmin && isSelfChecked && <span className="text-[9px] md:text-[10px] bg-blue-100 text-blue-700 px-1.5 md:px-2 py-0.5 md:py-1 rounded font-bold uppercase tracking-wider whitespace-nowrap">Diajukan</span>}
+                                {isGuru && isVerifChecked && <span className="text-[9px] md:text-[10px] bg-emerald-100 text-emerald-700 px-1.5 md:px-2 py-0.5 md:py-1 rounded font-bold uppercase tracking-wider whitespace-nowrap"><CheckCircle className="w-3 h-3 inline mr-1"/>ACC</span>}
+                              </div>
                             </label>
                           )
                         } else {
@@ -1852,16 +1845,16 @@
 
                           return (
                             <div key={cat.id} className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
-                              <label className={`flex items-center justify-between p-4 border-b border-slate-100 cursor-pointer transition-colors bg-slate-50 hover:bg-slate-100`}>
-                                <div className="flex items-center gap-3">
-                                  <div className="relative flex items-center justify-center">
+                              <label className={`flex items-start md:items-center justify-between p-3 md:p-4 border-b border-slate-100 cursor-pointer transition-colors bg-slate-50 hover:bg-slate-100 gap-3`}>
+                                <div className="flex items-start md:items-center gap-3">
+                                  <div className="relative flex items-center justify-center shrink-0 mt-0.5 md:mt-0">
                                     <input type="checkbox" checked={allCheckedForInput} ref={el => { if(el) el.indeterminate = someCheckedForInput && !allCheckedForInput }} onChange={handleChangeMain} className="w-5 h-5 appearance-none border-2 border-slate-300 rounded-md checked:bg-indigo-600 checked:border-indigo-600 transition-colors cursor-pointer" />
                                     {allCheckedForInput && <CheckCircle className="w-3.5 h-3.5 text-white absolute pointer-events-none" />}
                                   </div>
-                                  <span className={`font-bold text-slate-800`}>{cat.name}</span>
+                                  <span className={`font-bold text-slate-800 text-sm md:text-base leading-snug`}>{cat.name}</span>
                                 </div>
                               </label>
-                              <div className="p-2 pl-12 bg-white flex flex-col gap-1">
+                              <div className="p-2 md:p-3 pl-8 md:pl-12 bg-white flex flex-col gap-1">
                                 {cat.subCategories.map(sub => {
                                   const isSelfSubChecked = selfCheckedState.includes(sub.id);
                                   const isVerifSubChecked = verifiedCheckedState.includes(sub.id);
@@ -1869,16 +1862,18 @@
                                   const handleChangeSub = isGuru ? () => handleToggleSelfSingle(sub.id) : () => handleToggleVerifSingle(sub.id);
 
                                   return (
-                                    <label key={sub.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors">
-                                      <div className="flex items-center gap-3">
-                                        <div className="relative flex items-center justify-center">
+                                    <label key={sub.id} className="flex items-start md:items-center justify-between p-2 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors gap-2">
+                                      <div className="flex items-start md:items-center gap-2.5 w-full">
+                                        <div className="relative flex items-center justify-center shrink-0 mt-0.5 md:mt-0">
                                           <input type="checkbox" checked={isCheckedSubForInput} onChange={handleChangeSub} className={`w-4 h-4 appearance-none border-2 border-slate-300 rounded transition-colors cursor-pointer ${isGuru ? 'checked:bg-indigo-500 checked:border-indigo-500' : 'checked:bg-emerald-500 checked:border-emerald-500'}`} />
                                           {isCheckedSubForInput && <CheckCircle className="w-2.5 h-2.5 text-white absolute pointer-events-none" />}
                                         </div>
-                                        <span className={`text-sm ${isCheckedSubForInput ? (isGuru ? 'text-indigo-700 font-medium' : 'text-emerald-700 font-medium') : 'text-slate-600'}`}>{sub.name}</span>
+                                        <span className={`text-xs md:text-sm leading-snug ${isCheckedSubForInput ? (isGuru ? 'text-indigo-700 font-medium' : 'text-emerald-700 font-medium') : 'text-slate-600'}`}>{sub.name}</span>
                                       </div>
-                                      {isAdmin && isSelfSubChecked && <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-1 rounded font-bold">Diajukan Guru</span>}
-                                      {isGuru && isVerifSubChecked && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-1 rounded font-bold text-emerald-700"><CheckCircle className="w-3 h-3 inline mr-1"/>Terverifikasi</span>}
+                                      <div className="flex flex-col gap-1 items-end shrink-0">
+                                        {isAdmin && isSelfSubChecked && <span className="text-[8px] md:text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-bold uppercase whitespace-nowrap">Diajukan</span>}
+                                        {isGuru && isVerifSubChecked && <span className="text-[8px] md:text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold uppercase whitespace-nowrap text-emerald-700"><CheckCircle className="w-2.5 h-2.5 inline mr-0.5"/>ACC</span>}
+                                      </div>
                                     </label>
                                   )
                                 })}
@@ -1892,20 +1887,20 @@
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2"><FolderOpen className="w-4 h-4 text-indigo-500" /> Tautan Dokumen (Google Drive / Lainnya)</label>
-                  <div className="relative mb-6">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><LinkIcon className="h-5 w-5 text-slate-400" /></div>
-                    <input type="url" value={linkState} onChange={(e) => setLinkState(e.target.value)} readOnly={isAdmin} className={`block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors ${isAdmin ? 'bg-slate-100 text-slate-600 cursor-not-allowed' : 'bg-slate-50 focus:bg-white'}`} placeholder="https://drive.google.com/..." />
+                  <label className="block text-xs md:text-sm font-semibold text-slate-700 mb-2 md:mb-3 flex items-center gap-2"><FolderOpen className="w-4 h-4 text-indigo-500 shrink-0" /> Tautan Dokumen (Google Drive / Lainnya)</label>
+                  <div className="relative mb-5 md:mb-6">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><LinkIcon className="h-4 w-4 md:h-5 md:w-5 text-slate-400" /></div>
+                    <input type="url" value={linkState} onChange={(e) => setLinkState(e.target.value)} readOnly={isAdmin} className={`block w-full pl-9 md:pl-10 pr-3 py-2.5 md:py-3 border border-slate-200 rounded-xl text-xs md:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors ${isAdmin ? 'bg-slate-100 text-slate-600 cursor-not-allowed' : 'bg-slate-50 focus:bg-white'}`} placeholder="https://drive.google.com/..." />
                   </div>
 
-                  <label className="block text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2"><AlignLeft className="w-4 h-4 text-indigo-500" /> Catatan & Rekomendasi Supervisor</label>
-                  <textarea value={notesState} onChange={(e) => setNotesState(e.target.value)} readOnly={isGuru} className={`block w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors ${isGuru ? 'bg-slate-100 text-slate-600 cursor-not-allowed' : 'bg-slate-50 focus:bg-white'}`} placeholder="Tambahkan catatan, evaluasi, atau rekomendasi..." rows="4"></textarea>
+                  <label className="block text-xs md:text-sm font-semibold text-slate-700 mb-2 md:mb-3 flex items-center gap-2"><AlignLeft className="w-4 h-4 text-indigo-500 shrink-0" /> Catatan & Rekomendasi Supervisor</label>
+                  <textarea value={notesState} onChange={(e) => setNotesState(e.target.value)} readOnly={isGuru} className={`block w-full px-3 md:px-4 py-2.5 md:py-3 border border-slate-200 rounded-xl text-xs md:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors ${isGuru ? 'bg-slate-100 text-slate-600 cursor-not-allowed' : 'bg-slate-50 focus:bg-white'}`} placeholder="Tambahkan catatan, evaluasi, atau rekomendasi..." rows="4"></textarea>
                 </div>
               </div>
 
-              <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
-                <button onClick={() => setIsSupervisionModalOpen(false)} className="px-5 py-2.5 rounded-xl text-slate-600 font-medium hover:bg-slate-200 transition">Batal</button>
-                <button onClick={handleSave} className="px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 shadow-sm transition flex items-center gap-2">
+              <div className="px-4 md:px-6 py-3 md:py-4 border-t border-slate-100 bg-slate-50 flex flex-col-reverse sm:flex-row justify-end gap-2 md:gap-3 shrink-0">
+                <button onClick={() => setIsSupervisionModalOpen(false)} className="w-full sm:w-auto px-5 py-2.5 rounded-xl text-slate-600 font-medium hover:bg-slate-200 transition border border-slate-200 sm:border-transparent bg-white sm:bg-transparent text-sm md:text-base">Batal</button>
+                <button onClick={handleSave} className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 shadow-sm transition flex items-center justify-center gap-2 text-sm md:text-base">
                    <Save className="w-4 h-4" /> {isGuru ? 'Ajukan Evaluasi' : 'Simpan Verifikasi'}
                 </button>
               </div>
@@ -1915,12 +1910,31 @@
       };
 
       return (
-        <div className="flex min-h-screen bg-slate-50 font-sans text-slate-900">
+        <div className="flex flex-col md:flex-row min-h-screen bg-slate-50 font-sans text-slate-900 overflow-hidden">
+          
+          {/* Header Mobile Only */}
+          <div className="md:hidden flex items-center justify-between bg-slate-900 text-white p-4 sticky top-0 z-30 shadow-md shrink-0">
+            <div className="flex items-center gap-2.5">
+              <BookOpen className="w-6 h-6 text-indigo-400" />
+              <h1 className="text-lg font-bold tracking-tight">SISA</h1>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 bg-slate-800 px-2.5 py-1 rounded-full border border-slate-700">
+                <span className={`w-2 h-2 rounded-full ${isFirebaseReady ? 'bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.8)] animate-pulse' : 'bg-slate-500'}`}></span>
+                <span className="text-[9px] font-bold tracking-wider">{isFirebaseReady ? 'ONLINE' : 'LOKAL'}</span>
+              </div>
+              <button onClick={() => setIsMobileMenuOpen(true)} className="p-1.5 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
+                <Bars className="w-6 h-6" />
+              </button>
+            </div>
+          </div>
+
           <Sidebar />
-          <main className="flex-1 overflow-y-auto h-screen relative">
+
+          <main className="flex-1 overflow-y-auto h-[calc(100vh-64px)] md:h-screen relative w-full flex flex-col">
             
-            {/* Indikator Status Firebase */}
-            <div className="absolute top-6 right-8 z-50 flex items-center gap-2 bg-white/80 backdrop-blur-sm shadow-sm border border-slate-200 px-3 py-1.5 rounded-full pointer-events-none">
+            {/* Indikator Status Firebase (Desktop Only) */}
+            <div className="hidden md:flex absolute top-6 right-8 z-30 items-center gap-2 bg-white/80 backdrop-blur-sm shadow-sm border border-slate-200 px-3 py-1.5 rounded-full pointer-events-none">
               <span className={`w-2.5 h-2.5 rounded-full ${isFirebaseReady ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse' : 'bg-slate-400'}`}></span>
               <span className="text-[10px] font-bold tracking-wider text-slate-700">{isFirebaseReady ? 'ONLINE (FIREBASE)' : 'MODE LOKAL'}</span>
             </div>
