@@ -159,10 +159,11 @@
                   if (username === 'admin') {
                      setCurrentUser({ id: 'admin', name: 'Administrator', role: 'admin' });
                   } else {
-                     // Ambil nama lengkap guru dari Firestore berdasarkan UID otentikasinya
+                     // Ambil data user dari Firestore untuk mendapatkan role (guru/kepsek)
                      const docSnap = await getDoc(doc(firestoreDb, "teachers", user.uid));
                      if (docSnap.exists()) {
-                        setCurrentUser({ id: user.uid, name: docSnap.data().name, role: 'guru' });
+                        const data = docSnap.data();
+                        setCurrentUser({ id: user.uid, name: data.name, role: data.role || 'guru' });
                      } else {
                         setCurrentUser({ id: user.uid, name: username, role: 'guru' });
                      }
@@ -221,10 +222,16 @@
       }, [teachers]);
 
       // --- LOGIKA ISOLASI TAHUN AJARAN ---
-      const currentTeachers = useMemo(() => teachers.filter(t => t.academicYear === selectedYear), [teachers, selectedYear]);
+      const currentTeachers = useMemo(() => teachers.filter(t => t.academicYear === selectedYear && t.role !== 'kepsek'), [teachers, selectedYear]);
       const currentCategories = useMemo(() => categories.filter(c => c.academicYear === selectedYear), [categories, selectedYear]);
       const currentSchedules = useMemo(() => schedules.filter(s => s.academicYear === selectedYear), [schedules, selectedYear]);
       const currentSupervisions = useMemo(() => supervisions.filter(s => s.academicYear === selectedYear), [supervisions, selectedYear]);
+
+      // --- Variabel Role (Diperbarui untuk Kepala Sekolah) ---
+      const isAdmin = currentUser?.role === 'admin';
+      const isKepsek = currentUser?.role === 'kepsek';
+      const isVerifikator = isAdmin || isKepsek;
+      const isGuru = !isVerifikator;
 
       // --- Logika Auth ---
       const handleLogin = async (username, password) => {
@@ -369,16 +376,13 @@
          return <LoginScreen />;
       }
 
-      const isAdmin = currentUser.role === 'admin';
-      const isGuru = currentUser.role === 'guru';
-
       // --- Fitur Ekspor & Impor CSV Data Guru (Menyimpan ke Firestore) ---
       const handleExportTeacherCSV = () => {
         const headers = ['ID', 'Nama Lengkap', 'Username', 'Password', 'Tahun Ajaran'];
         const safeStr = (str) => `"${(str || '').replace(/"/g, '""')}"`;
         const rows = teachers.map(t => [t.id, safeStr(t.name), safeStr(t.username), safeStr(t.password), safeStr(t.academicYear)].join(','));
         const csvStr = "data:text/csv;charset=utf-8," + encodeURIComponent([headers.join(','), ...rows].join('\n'));
-        const dl = document.createElement('a'); dl.setAttribute("href", csvStr); dl.setAttribute("download", `Data_Guru_SISA_${selectedYear.replace('/', '-')}.csv`);
+        const dl = document.createElement('a'); dl.setAttribute("href", csvStr); dl.setAttribute("download", `Data_Pengguna_SISA_${selectedYear.replace('/', '-')}.csv`);
         document.body.appendChild(dl); dl.click(); dl.remove();
       };
 
@@ -409,12 +413,12 @@
                if (row.length >= 5) {
                   newTeachers.push({
                      id: row[0] || Date.now().toString() + i,
-                     name: row[1], username: row[2].toLowerCase().trim(), password: row[3], academicYear: row[4] || selectedYear
+                     name: row[1], username: row[2].toLowerCase().trim(), password: row[3], academicYear: row[4] || selectedYear, role: 'guru'
                   });
                }
             }
 
-            if (newTeachers.length > 0 && confirm(`Ditemukan ${newTeachers.length} data guru dalam CSV. Impor ke Database Firebase?`)) {
+            if (newTeachers.length > 0 && confirm(`Ditemukan ${newTeachers.length} data pengguna dalam CSV. Impor ke Database Firebase?`)) {
                const { initializeApp, getAuth, createUserWithEmailAndPassword, doc, setDoc } = window.FirebaseSDK;
                const firebaseConfig = { apiKey: "AIzaSyA6s-Dl45Sms932s9EI-Qb4EU2-xnDrTZ4", authDomain: "supervisi-app.firebaseapp.com", projectId: "supervisi-app" };
                const secondaryApp = window.secondaryFirebaseApp || initializeApp(firebaseConfig, "SecondaryApp");
@@ -436,7 +440,7 @@
                   } catch(e) { console.warn("Error import user:", e); }
                }
                await secondaryAuth.signOut();
-               alert('Data guru berhasil diimpor ke Firebase!');
+               alert('Data pengguna berhasil diimpor ke Firebase!');
             }
           } catch (err) { alert('Gagal Impor: ' + err.message); }
           if (fileInputRef.current) fileInputRef.current.value = "";
@@ -593,15 +597,13 @@
       const Sidebar = () => {
         const handleNavClick = (tab) => {
            setActiveTab(tab);
-           setIsMobileMenuOpen(false); // Tutup sidebar mobile setelah klik
+           setIsMobileMenuOpen(false);
         };
 
         return (
           <>
-            {/* Mobile Overlay */}
             <div className={`fixed inset-0 bg-slate-900/50 z-40 transition-opacity md:hidden ${isMobileMenuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={() => setIsMobileMenuOpen(false)}></div>
             
-            {/* Sidebar Container */}
             <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 flex flex-col h-screen border-r border-slate-800 shrink-0 transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
               
               <div className="p-6 pb-4 flex items-center justify-between">
@@ -622,7 +624,7 @@
                     </div>
                     <div className="overflow-hidden">
                        <p className="text-sm font-bold text-white truncate">{currentUser.name}</p>
-                       <p className="text-xs text-indigo-300 uppercase font-semibold">{currentUser.role}</p>
+                       <p className="text-xs text-indigo-300 uppercase font-semibold">{currentUser.role === 'kepsek' ? 'Kepala Sekolah' : currentUser.role}</p>
                     </div>
                  </div>
               </div>
@@ -633,9 +635,9 @@
                     <LayoutDashboard className="w-5 h-5 shrink-0" /> <span className="font-medium">Dashboard</span>
                   </button>
                   
-                  {isAdmin && (
+                  {isVerifikator && (
                     <button onClick={() => handleNavClick('teachers')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'teachers' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'hover:bg-slate-800 hover:text-white'}`}>
-                      <UserCircle className="w-5 h-5 shrink-0" /> <span className="font-medium">Manajemen Guru</span>
+                      <UserCircle className="w-5 h-5 shrink-0" /> <span className="font-medium">Manajemen Pengguna</span>
                     </button>
                   )}
 
@@ -643,7 +645,7 @@
                     <Calendar className="w-5 h-5 shrink-0" /> <span className="font-medium">Rencana Supervisi</span>
                   </button>
                   
-                  {isAdmin && (
+                  {isVerifikator && (
                     <button onClick={() => handleNavClick('reports')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'reports' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'hover:bg-slate-800 hover:text-white'}`}>
                       <Printer className="w-5 h-5 shrink-0" /> <span className="font-medium">Cetak Laporan</span>
                     </button>
@@ -667,9 +669,9 @@
                   <div className="p-4 mx-4 mb-4 mt-6 bg-slate-800/50 rounded-xl border border-slate-700/50">
                     <h4 className="text-xs font-semibold text-slate-400 mb-3 flex items-center gap-2 uppercase tracking-wider"><Database className="w-3 h-3" /> Ekspor/Impor CSV</h4>
                     <div className="space-y-2">
-                      <button onClick={handleExportTeacherCSV} className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 py-2 px-3 rounded-lg text-sm transition-colors"><Download className="w-4 h-4" /> Unduh CSV Guru</button>
+                      <button onClick={handleExportTeacherCSV} className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 py-2 px-3 rounded-lg text-sm transition-colors"><Download className="w-4 h-4" /> Unduh Data CSV</button>
                       <label className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 py-2 px-3 rounded-lg text-sm cursor-pointer transition-colors">
-                        <Upload className="w-4 h-4" /> Impor CSV Guru <input type="file" accept=".csv" className="hidden" onChange={handleImportTeacherCSV} ref={fileInputRef} />
+                        <Upload className="w-4 h-4" /> Impor Data CSV <input type="file" accept=".csv" className="hidden" onChange={handleImportTeacherCSV} ref={fileInputRef} />
                       </label>
                     </div>
                   </div>
@@ -688,7 +690,8 @@
 
       // --- 1. Dashboard Component ---
       const Dashboard = () => {
-        if (isGuru) {
+        // Tampilan Dashboard Personal (Khusus Guru)
+        if (!isVerifikator) {
            const myProgress = getTeacherProgress(currentUser.id);
            const mySup = getTeacherSupervision(currentUser.id);
            return (
@@ -723,7 +726,7 @@
                          </div>
                       </div>
                       <h3 className="text-lg font-bold text-slate-800 mb-1">Progres Supervisi</h3>
-                      <p className="text-sm text-slate-500">{myProgress.completed} dari {myProgress.total} item telah disetujui Admin.</p>
+                      <p className="text-sm text-slate-500">{myProgress.completed} dari {myProgress.total} item telah disetujui Supervisor.</p>
                    </div>
 
                    <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
@@ -748,7 +751,7 @@
                             {myProgress.isPendingVerif && (
                               <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
                                 <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                                <p className="text-xs text-amber-800 font-medium leading-relaxed">Anda telah melakukan evaluasi diri. Menunggu Admin memverifikasi hasil Anda.</p>
+                                <p className="text-xs text-amber-800 font-medium leading-relaxed">Anda telah melakukan evaluasi diri. Menunggu Tim Supervisor memverifikasi hasil Anda.</p>
                               </div>
                             )}
                          </div>
@@ -770,7 +773,7 @@
            );
         }
 
-        // Dashboard Admin
+        // Tampilan Dashboard Verifikator (Admin & Kepsek)
         return (
           <div className="p-4 md:p-8 max-w-7xl mx-auto animate-in fade-in duration-300">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 md:mb-8">
@@ -864,10 +867,10 @@
       const ScheduleData = () => {
         const [editingScheduleId, setEditingScheduleId] = useState(null);
         const [formData, setFormData] = useState({
-          date: '', teacherId: isGuru ? currentUser.id : '', subject: '', kelas: '', material: '', supervisor: '', status: 'Menunggu Persetujuan'
+          date: '', teacherId: isGuru ? currentUser.id : '', subject: '', kelas: '', material: '', supervisor: '', status: 'Menunggu Persetujuan', adminNotes: ''
         });
 
-        const displayedSchedules = currentSchedules.filter(s => isAdmin || s.teacherId === currentUser.id).sort((a, b) => new Date(a.date) - new Date(b.date)); 
+        const displayedSchedules = currentSchedules.filter(s => isVerifikator || s.teacherId === currentUser.id).sort((a, b) => new Date(a.date) - new Date(b.date)); 
 
         const handleSubmitSchedule = async (e) => {
           e.preventDefault();
@@ -875,30 +878,37 @@
              alert('Mohon lengkapi semua isian formulir jadwal.'); return;
           }
 
+          const finalData = { ...formData };
+          // Otomatis mereset status jadwal yang di-reschedule saat guru menyimpannya kembali
+          if (!isVerifikator && finalData.status === 'Reschedule') {
+             finalData.status = 'Menunggu Persetujuan';
+          }
+
           try {
             const { doc, setDoc, updateDoc } = window.FirebaseSDK;
             if (editingScheduleId) {
-               await updateDoc(doc(db, "schedules", editingScheduleId), formData);
+               await updateDoc(doc(db, "schedules", editingScheduleId), finalData);
                setEditingScheduleId(null);
             } else {
                const newId = Date.now().toString();
-               await setDoc(doc(db, "schedules", newId), { id: newId, ...formData, academicYear: selectedYear });
+               await setDoc(doc(db, "schedules", newId), { id: newId, ...finalData, academicYear: selectedYear });
             }
-            setFormData({ date: '', teacherId: isGuru ? currentUser.id : '', subject: '', kelas: '', material: '', supervisor: '', status: 'Menunggu Persetujuan' });
+            setFormData({ date: '', teacherId: isGuru ? currentUser.id : '', subject: '', kelas: '', material: '', supervisor: '', status: 'Menunggu Persetujuan', adminNotes: '' });
           } catch(err) { alert("Gagal menyimpan jadwal: " + err.message); }
         };
 
         const handleEditSchedule = (schedule) => {
           setFormData({
              date: schedule.date, teacherId: schedule.teacherId, subject: schedule.subject,
-             kelas: schedule.kelas || '', material: schedule.material, supervisor: schedule.supervisor, status: schedule.status || 'Menunggu Persetujuan'
+             kelas: schedule.kelas || '', material: schedule.material, supervisor: schedule.supervisor, 
+             status: schedule.status || 'Menunggu Persetujuan', adminNotes: schedule.adminNotes || ''
           });
           setEditingScheduleId(schedule.id);
         };
 
         const handleCancelEdit = () => {
           setEditingScheduleId(null);
-          setFormData({ date: '', teacherId: isGuru ? currentUser.id : '', subject: '', kelas: '', material: '', supervisor: '', status: 'Menunggu Persetujuan' });
+          setFormData({ date: '', teacherId: isGuru ? currentUser.id : '', subject: '', kelas: '', material: '', supervisor: '', status: 'Menunggu Persetujuan', adminNotes: '' });
         };
 
         const handleDeleteSchedule = async (id) => {
@@ -925,7 +935,7 @@
             <div className="mb-6 md:mb-8 flex flex-col md:flex-row justify-between md:items-end gap-4">
               <div>
                 <h2 className="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">Rencana Supervisi</h2>
-                <p className="text-sm md:text-base text-slate-500 mt-1">{isGuru ? 'Ajukan jadwal supervisi Anda.' : 'Atur dan verifikasi pengajuan jadwal pelaksanaan supervisi.'}</p>
+                <p className="text-sm md:text-base text-slate-500 mt-1">{isGuru ? 'Ajukan dan perbarui jadwal supervisi Anda.' : 'Atur, setujui, atau ajukan reschedule jadwal supervisi.'}</p>
               </div>
               <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-sm w-full md:w-auto">
                 <FolderOpen className="w-5 h-5 text-slate-400 ml-2 shrink-0" />
@@ -945,7 +955,7 @@
                      <Calendar className={`w-5 h-5 ${editingScheduleId ? 'text-amber-500' : 'text-indigo-500'}`} /> 
                      {editingScheduleId ? 'Edit Jadwal' : (isGuru ? 'Ajukan Jadwal' : 'Tambah Jadwal')}
                    </h3>
-                   {isAdmin && currentTeachers.length === 0 ? (
+                   {isVerifikator && currentTeachers.length === 0 ? (
                       <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg border border-amber-100">Silakan tambahkan Data Guru terlebih dahulu.</p>
                    ) : (
                      <form onSubmit={handleSubmitSchedule} className="space-y-4">
@@ -953,7 +963,7 @@
                           <label className="block text-sm font-semibold text-slate-700 mb-1.5">Tanggal Pelaksanaan</label>
                           <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm" required />
                         </div>
-                        {isAdmin && (
+                        {isVerifikator && (
                           <div>
                             <label className="block text-sm font-semibold text-slate-700 mb-1.5">Pilih Guru</label>
                             <select value={formData.teacherId} onChange={e => setFormData({...formData, teacherId: e.target.value})} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm" required>
@@ -981,15 +991,24 @@
                           <input type="text" value={formData.supervisor} onChange={e => setFormData({...formData, supervisor: e.target.value})} placeholder="Nama penilai..." className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm" required />
                         </div>
                         
-                        {isAdmin && editingScheduleId && (
-                           <div>
-                             <label className="block text-sm font-semibold text-slate-700 mb-1.5">Status Persetujuan</label>
-                             <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500/50 text-sm font-semibold">
-                                <option value="Menunggu Persetujuan">Menunggu</option>
-                                <option value="Disetujui">Disetujui</option>
-                                <option value="Ditolak">Ditolak</option>
-                             </select>
-                           </div>
+                        {isVerifikator && editingScheduleId && (
+                           <>
+                             <div>
+                               <label className="block text-sm font-semibold text-slate-700 mb-1.5">Status Persetujuan</label>
+                               <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500/50 text-sm font-semibold">
+                                  <option value="Menunggu Persetujuan">Menunggu Persetujuan</option>
+                                  <option value="Disetujui">Disetujui</option>
+                                  <option value="Ditolak">Ditolak</option>
+                                  <option value="Reschedule">Minta Reschedule</option>
+                               </select>
+                             </div>
+                             {(formData.status === 'Reschedule' || formData.status === 'Ditolak') && (
+                                <div>
+                                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Catatan (Wajib)</label>
+                                  <textarea value={formData.adminNotes} onChange={e => setFormData({...formData, adminNotes: e.target.value})} rows="2" className="w-full px-4 py-2.5 bg-amber-50 border border-amber-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/50 text-sm" placeholder="Berikan alasan atau saran tanggal..."></textarea>
+                                </div>
+                             )}
+                           </>
                         )}
 
                         <div className="pt-2 flex flex-col gap-2">
@@ -1024,9 +1043,9 @@
                         <tr className="bg-slate-50 text-slate-500 text-sm border-b border-slate-200">
                           <th className="px-4 py-4 font-semibold w-12 text-center whitespace-nowrap">No</th>
                           <th className="px-4 py-4 font-semibold min-w-[140px] whitespace-nowrap">Tanggal</th>
-                          {isAdmin && <th className="px-4 py-4 font-semibold min-w-[150px]">Guru</th>}
+                          {isVerifikator && <th className="px-4 py-4 font-semibold min-w-[150px]">Guru</th>}
                           <th className="px-4 py-4 font-semibold min-w-[180px]">Rincian</th>
-                          <th className="px-4 py-4 font-semibold min-w-[130px] text-center">Status</th>
+                          <th className="px-4 py-4 font-semibold min-w-[140px] text-center">Status</th>
                           <th className="px-4 py-4 font-semibold w-24 text-center">Aksi</th>
                         </tr>
                       </thead>
@@ -1036,30 +1055,37 @@
                           const isBeingEdited = editingScheduleId === schedule.id;
                           const currentStatus = schedule.status || 'Menunggu Persetujuan';
                           
-                          let statusColor = "bg-amber-100 text-amber-800";
-                          if (currentStatus === 'Disetujui') statusColor = "bg-emerald-100 text-emerald-800";
-                          if (currentStatus === 'Ditolak') statusColor = "bg-red-100 text-red-800";
+                          let statusColor = "bg-amber-100 text-amber-800 border-amber-200";
+                          if (currentStatus === 'Disetujui') statusColor = "bg-emerald-100 text-emerald-800 border-emerald-200";
+                          if (currentStatus === 'Ditolak') statusColor = "bg-red-100 text-red-800 border-red-200";
+                          if (currentStatus === 'Reschedule') statusColor = "bg-blue-100 text-blue-800 border-blue-200";
 
-                          const canEdit = isAdmin || currentStatus === 'Menunggu Persetujuan';
+                          const canEdit = isVerifikator || currentStatus === 'Menunggu Persetujuan' || currentStatus === 'Reschedule';
 
                           return (
                             <tr key={schedule.id} className={`transition-colors ${isBeingEdited ? 'bg-amber-50/50' : 'hover:bg-slate-50/50'}`}>
                               <td className="px-4 py-3 text-center text-slate-500 text-sm">{index + 1}</td>
                               <td className="px-4 py-3"><span className="font-medium text-slate-800 text-xs md:text-sm block">{formatDate(schedule.date)}</span></td>
-                              {isAdmin && (<td className="px-4 py-3"><span className="font-bold text-indigo-700 block text-sm">{teacher ? teacher.name : 'Guru Dihapus'}</span></td>)}
+                              {isVerifikator && (<td className="px-4 py-3"><span className="font-bold text-indigo-700 block text-sm">{teacher ? teacher.name : 'Guru Dihapus'}</span></td>)}
                               <td className="px-4 py-3">
                                 <span className="font-semibold text-slate-800 text-sm block">{schedule.subject} - {schedule.kelas}</span>
                                 <span className="text-xs text-slate-500 mt-0.5 block line-clamp-1">Mat: {schedule.material}</span>
                                 <span className="text-xs text-slate-500 block">Sup: {schedule.supervisor}</span>
                               </td>
-                              <td className="px-4 py-3 text-center">
-                                {isAdmin ? (
-                                   <select value={currentStatus} onChange={(e) => handleStatusChange(schedule.id, e.target.value)} className={`text-xs font-bold px-2 py-1.5 rounded outline-none cursor-pointer ${statusColor} w-full text-center appearance-none`}>
-                                      <option value="Menunggu Persetujuan">Menunggu</option><option value="Disetujui">Disetujui</option><option value="Ditolak">Ditolak</option>
+                              <td className="px-4 py-3 text-center flex flex-col justify-center h-full">
+                                {isVerifikator ? (
+                                   <select value={currentStatus} onChange={(e) => handleStatusChange(schedule.id, e.target.value)} className={`text-xs font-bold px-2 py-1.5 rounded outline-none cursor-pointer border ${statusColor} w-full text-center appearance-none mb-1`}>
+                                      <option value="Menunggu Persetujuan">Menunggu</option><option value="Disetujui">Disetujui</option><option value="Reschedule">Reschedule</option><option value="Ditolak">Ditolak</option>
                                    </select>
-                                ) : (<span className={`inline-block px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold whitespace-nowrap ${statusColor}`}>{currentStatus}</span>)}
+                                ) : (<span className={`inline-block px-2.5 py-1 rounded-full border text-[10px] md:text-xs font-bold whitespace-nowrap mb-1 ${statusColor}`}>{currentStatus}</span>)}
+                                
+                                {schedule.adminNotes && (
+                                   <div className="text-[10px] bg-slate-100 text-slate-600 p-1.5 rounded text-left border border-slate-200 italic leading-tight">
+                                     <strong>Catatan:</strong> {schedule.adminNotes}
+                                   </div>
+                                )}
                               </td>
-                              <td className="px-4 py-3 text-center">
+                              <td className="px-4 py-3 text-center align-middle">
                                 <div className="flex items-center justify-center gap-1">
                                   {canEdit ? (
                                      <>
@@ -1073,7 +1099,7 @@
                           );
                         })}
                         {displayedSchedules.length === 0 && (
-                          <tr><td colSpan={isAdmin ? 6 : 5} className="px-4 py-12 text-center text-sm text-slate-400">Belum ada jadwal yang {isGuru ? 'Anda ajukan' : 'terdaftar'} untuk tahun ajaran ini.</td></tr>
+                          <tr><td colSpan={isVerifikator ? 6 : 5} className="px-4 py-12 text-center text-sm text-slate-400">Belum ada jadwal yang {isGuru ? 'Anda ajukan' : 'terdaftar'} untuk tahun ajaran ini.</td></tr>
                         )}
                       </tbody>
                     </table>
@@ -1085,11 +1111,12 @@
         );
       };
 
-      // --- 2. Teachers Data Component (HANYA ADMIN) ---
+      // --- 2. Teachers Data Component (HANYA ADMIN & KEPSEK) ---
       const TeachersData = () => {
         const [newTeacherName, setNewTeacherName] = useState('');
         const [newTeacherUsername, setNewTeacherUsername] = useState('');
         const [newTeacherPassword, setNewTeacherPassword] = useState('123456');
+        const [newTeacherRole, setNewTeacherRole] = useState('guru'); // Default untuk tambah akun baru
         
         const [editingId, setEditingId] = useState(null);
         const [editName, setEditName] = useState('');
@@ -1100,7 +1127,10 @@
           e.preventDefault();
           if (!newTeacherName.trim() || !newTeacherUsername.trim()) return;
           const safeUsername = newTeacherUsername.toLowerCase().trim();
-          if (teachers.some(t => t.username === safeUsername)) { alert('Username sudah digunakan.'); return; }
+          
+          // Cek apakah username sudah dipakai di daftar lokal (termasuk kepsek jika dia mengambil semua data)
+          const allUsers = teachers; // Mengecek dari seluruh state teachers
+          if (allUsers.some(t => t.username === safeUsername)) { alert('Username sudah digunakan.'); return; }
 
           const email = `${safeUsername}@supervisi.app`;
           
@@ -1122,9 +1152,9 @@
              }
              await secondaryAuth.signOut();
 
-             const teacherData = { id: newId, name: newTeacherName, username: safeUsername, password: newTeacherPassword, academicYear: selectedYear };
+             const teacherData = { id: newId, name: newTeacherName, username: safeUsername, password: newTeacherPassword, academicYear: selectedYear, role: newTeacherRole };
              await setDoc(doc(db, "teachers", newId), teacherData);
-             setNewTeacherName(''); setNewTeacherUsername(''); setNewTeacherPassword('123456');
+             setNewTeacherName(''); setNewTeacherUsername(''); setNewTeacherPassword('123456'); setNewTeacherRole('guru');
           } catch(err) { alert("Gagal Tambah: " + err.message); }
         };
 
@@ -1145,7 +1175,7 @@
         };
 
         const handleDeleteTeacher = async (id) => {
-          if(confirm('Hapus guru ini? Akun login dan data supervisinya akan ikut terhapus.')) {
+          if(confirm('Hapus pengguna ini? Akun login dan data miliknya akan ikut terhapus.')) {
             try {
                const { doc, deleteDoc } = window.FirebaseSDK;
                await deleteDoc(doc(db, "teachers", id));
@@ -1166,8 +1196,8 @@
           <div className="p-4 md:p-8 max-w-7xl mx-auto animate-in fade-in duration-300">
             <div className="mb-6 md:mb-8 flex flex-col md:flex-row justify-between md:items-end gap-4">
               <div>
-                <h2 className="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">Manajemen Guru & Akun</h2>
-                <p className="text-sm md:text-base text-slate-500 mt-1">Kelola data guru, buatkan akun, dan verifikasi ({selectedYear}).</p>
+                <h2 className="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">Manajemen Pengguna</h2>
+                <p className="text-sm md:text-base text-slate-500 mt-1">{isAdmin ? `Kelola akun Guru dan Kepala Sekolah, serta verifikasi progresnya.` : `Lakukan verifikasi progres dan evaluasi para Guru.`}</p>
               </div>
               <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-sm w-full md:w-auto">
                 <FolderOpen className="w-5 h-5 text-slate-400 ml-2 shrink-0" />
@@ -1179,39 +1209,53 @@
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col mb-8">
-              <div className="p-4 md:p-6 border-b border-slate-100 bg-slate-50/50">
-                <h3 className="text-base md:text-lg font-bold text-slate-800 flex items-center gap-2 mb-4">
-                  <UserCircle className="w-5 h-5 text-indigo-500" /> Tambah Guru & Buat Akun
-                </h3>
-                <form onSubmit={handleAddTeacher} className="flex flex-col md:flex-row gap-3 md:gap-4 items-start md:items-end">
-                  <div className="w-full flex-1">
-                     <label className="block text-xs font-bold text-slate-500 mb-1">Nama Lengkap</label>
-                     <input type="text" value={newTeacherName} onChange={(e) => setNewTeacherName(e.target.value)} placeholder="Nama Lengkap..." className="w-full px-3 md:px-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-colors text-sm" required />
-                  </div>
-                  <div className="w-full md:w-48">
-                     <label className="block text-xs font-bold text-slate-500 mb-1">Username Login</label>
-                     <input type="text" value={newTeacherUsername} onChange={(e) => setNewTeacherUsername(e.target.value)} placeholder="username..." className="w-full px-3 md:px-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-colors text-sm" required />
-                  </div>
-                  <div className="w-full md:w-32">
-                     <label className="block text-xs font-bold text-slate-500 mb-1">Password</label>
-                     <input type="text" value={newTeacherPassword} onChange={(e) => setNewTeacherPassword(e.target.value)} placeholder="Pass..." className="w-full px-3 md:px-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-colors text-sm" required />
-                  </div>
-                  <button type="submit" className="w-full md:w-auto bg-indigo-600 text-white px-6 py-2 rounded-xl hover:bg-indigo-700 transition flex items-center justify-center gap-2 text-sm font-medium h-[38px] mt-2 md:mt-0">
-                    <Plus className="w-4 h-4" /> Tambah
-                  </button>
-                </form>
+            {isAdmin && (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col mb-8">
+                <div className="p-4 md:p-6 border-b border-slate-100 bg-slate-50/50">
+                  <h3 className="text-base md:text-lg font-bold text-slate-800 flex items-center gap-2 mb-4">
+                    <UserCircle className="w-5 h-5 text-indigo-500" /> Tambah Pengguna Baru
+                  </h3>
+                  <form onSubmit={handleAddTeacher} className="flex flex-col md:flex-row gap-3 md:gap-4 items-start md:items-end">
+                    <div className="w-full flex-1">
+                       <label className="block text-xs font-bold text-slate-500 mb-1">Nama Lengkap</label>
+                       <input type="text" value={newTeacherName} onChange={(e) => setNewTeacherName(e.target.value)} placeholder="Nama Lengkap..." className="w-full px-3 md:px-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-colors text-sm" required />
+                    </div>
+                    <div className="w-full md:w-32">
+                       <label className="block text-xs font-bold text-slate-500 mb-1">Peran Akses</label>
+                       <select value={newTeacherRole} onChange={(e) => setNewTeacherRole(e.target.value)} className="w-full px-3 md:px-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-colors text-sm font-semibold">
+                          <option value="guru">Guru</option>
+                          <option value="kepsek">Kepala Sekolah</option>
+                       </select>
+                    </div>
+                    <div className="w-full md:w-40">
+                       <label className="block text-xs font-bold text-slate-500 mb-1">Username Login</label>
+                       <input type="text" value={newTeacherUsername} onChange={(e) => setNewTeacherUsername(e.target.value)} placeholder="username..." className="w-full px-3 md:px-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-colors text-sm" required />
+                    </div>
+                    <div className="w-full md:w-32">
+                       <label className="block text-xs font-bold text-slate-500 mb-1">Password</label>
+                       <input type="text" value={newTeacherPassword} onChange={(e) => setNewTeacherPassword(e.target.value)} placeholder="Pass..." className="w-full px-3 md:px-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-colors text-sm" required />
+                    </div>
+                    <button type="submit" className="w-full md:w-auto bg-indigo-600 text-white px-6 py-2 rounded-xl hover:bg-indigo-700 transition flex items-center justify-center gap-2 text-sm font-medium h-[38px] mt-2 md:mt-0">
+                      <Plus className="w-4 h-4" /> Tambah
+                    </button>
+                  </form>
+                </div>
               </div>
-              
+            )}
+
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+                 <h3 className="text-base font-bold text-slate-800">Daftar Guru ({selectedYear})</h3>
+              </div>
               <div className="overflow-x-auto w-full">
                 <table className="w-full text-left border-collapse min-w-[700px]">
                   <thead>
-                    <tr className="bg-slate-50 text-slate-500 text-sm border-b border-slate-200">
+                    <tr className="bg-white text-slate-500 text-sm border-b border-slate-200">
                       <th className="px-4 py-4 font-semibold w-12 text-center whitespace-nowrap">No</th>
-                      <th className="px-4 py-4 font-semibold min-w-[200px]">Data Guru & Akun</th>
+                      <th className="px-4 py-4 font-semibold min-w-[200px]">Nama & Info Akun</th>
                       <th className="px-4 py-4 font-semibold w-48 text-center whitespace-nowrap">Progres Verifikasi</th>
                       <th className="px-4 py-4 font-semibold w-32 text-center whitespace-nowrap">Status</th>
-                      <th className="px-4 py-4 font-semibold min-w-[140px] text-center">Aksi</th>
+                      <th className="px-4 py-4 font-semibold min-w-[140px] text-center">Aksi Verifikasi</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -1237,7 +1281,7 @@
                             ) : (
                               <div>
                                  <span className="font-bold text-slate-800 block text-sm">{t.name}</span>
-                                 <span className="text-xs text-slate-500 flex items-center gap-1 mt-1"><Key className="w-3 h-3 shrink-0"/> User: <strong>{t.username}</strong> | Pass: {t.password}</span>
+                                 {isAdmin && <span className="text-xs text-slate-500 flex items-center gap-1 mt-1"><Key className="w-3 h-3 shrink-0"/> User: <strong>{t.username}</strong> | Pass: {t.password}</span>}
                               </div>
                             )}
                           </td>
@@ -1249,7 +1293,7 @@
                                 </div>
                                 <span className="text-xs font-semibold text-slate-600 w-8">{prog.percentage}%</span>
                               </div>
-                              {prog.isPendingVerif && <span className="text-[9px] md:text-[10px] bg-amber-100 text-amber-700 px-2 rounded-full font-bold whitespace-nowrap">Ada Pengajuan Baru</span>}
+                              {prog.isPendingVerif && <span className="text-[9px] md:text-[10px] bg-amber-100 text-amber-700 px-2 rounded-full font-bold whitespace-nowrap">Perlu Verifikasi</span>}
                             </div>
                           </td>
                           <td className="px-4 py-3 text-center">
@@ -1258,7 +1302,7 @@
                             ) : isComplete ? (
                                <span className="inline-flex items-center px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 text-[10px] md:text-xs font-medium whitespace-nowrap">Selesai 100%</span>
                             ) : (
-                               <span className="inline-flex items-center px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100 text-[10px] md:text-xs font-medium whitespace-nowrap">Proses Verifikasi</span>
+                               <span className="inline-flex items-center px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100 text-[10px] md:text-xs font-medium whitespace-nowrap">Dalam Proses</span>
                             )}
                           </td>
                           <td className="px-4 py-3 text-center">
@@ -1266,7 +1310,7 @@
                               <button onClick={() => openSupervision(t)} className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors border ${prog.isPendingVerif ? 'bg-amber-500 text-white border-amber-600 hover:bg-amber-600 shadow-md animate-pulse' : 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-600 hover:text-white'}`}>
                                 <ClipboardList className="w-3.5 h-3.5" /> <span className="hidden md:inline">{prog.isPendingVerif ? 'Verifikasi' : 'Buka Data'}</span>
                               </button>
-                              {!editingId && (
+                              {isAdmin && !editingId && (
                                 <>
                                   <button onClick={() => handleStartEdit(t)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Pen className="w-4 h-4" /></button>
                                   <button onClick={() => handleDeleteTeacher(t.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
@@ -1284,6 +1328,39 @@
                 </table>
               </div>
             </div>
+            
+            {/* Tabel Khusus Kepala Sekolah (Hanya terlihat oleh Admin) */}
+            {isAdmin && teachers.filter(t => t.role === 'kepsek').length > 0 && (
+               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mt-8">
+                 <div className="p-4 border-b border-slate-100 bg-amber-50 flex items-center justify-between">
+                    <h3 className="text-base font-bold text-amber-900">Daftar Akun Kepala Sekolah</h3>
+                 </div>
+                 <div className="overflow-x-auto w-full">
+                   <table className="w-full text-left border-collapse">
+                     <thead>
+                       <tr className="bg-white text-slate-500 text-sm border-b border-slate-200">
+                         <th className="px-4 py-3 font-semibold w-12 text-center">No</th>
+                         <th className="px-4 py-3 font-semibold">Nama Lengkap</th>
+                         <th className="px-4 py-3 font-semibold">Informasi Akun</th>
+                         <th className="px-4 py-3 font-semibold text-center w-32">Aksi</th>
+                       </tr>
+                     </thead>
+                     <tbody className="divide-y divide-slate-100">
+                       {teachers.filter(t => t.role === 'kepsek').map((t, idx) => (
+                          <tr key={t.id} className="hover:bg-slate-50/50">
+                             <td className="px-4 py-3 text-center text-slate-500 text-sm">{idx + 1}</td>
+                             <td className="px-4 py-3 font-bold text-slate-800 text-sm">{t.name}</td>
+                             <td className="px-4 py-3 text-xs text-slate-500"><Key className="w-3 h-3 inline mr-1"/> User: <strong>{t.username}</strong> | Pass: {t.password}</td>
+                             <td className="px-4 py-3 text-center">
+                               <button onClick={() => handleDeleteTeacher(t.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+                             </td>
+                          </tr>
+                       ))}
+                     </tbody>
+                   </table>
+                 </div>
+               </div>
+            )}
           </div>
         );
       };
@@ -1508,7 +1585,7 @@
         );
       };
 
-      // --- 4. Reports Data Component (HANYA ADMIN) ---
+      // --- 4. Reports Data Component (HANYA ADMIN & KEPSEK) ---
       const ReportsData = () => {
         const [reportMode, setReportMode] = useState('all');
         const [selectedTeacherId, setSelectedTeacherId] = useState('');
@@ -1627,7 +1704,7 @@
                await setDoc(doc(db, "schoolInfo", "main"), newSchoolData);
 
                if(copyFromCurrent) {
-                  const teacherPromises = currentTeachers.map(t => {
+                  const teacherPromises = teachers.filter(t => t.academicYear === selectedYear).map(t => {
                      const newId = 'T' + Date.now() + Math.random().toString(36).substring(2, 9);
                      return setDoc(doc(db, "teachers", newId), { ...t, id: newId, academicYear: formattedYear });
                   });
@@ -1636,7 +1713,7 @@
                      return setDoc(doc(db, "categories", newId), { ...c, id: newId, academicYear: formattedYear });
                   });
                   await Promise.all([...teacherPromises, ...catPromises]);
-                  alert(`Berhasil membuat tahun ${formattedYear} dan menyalin ${currentTeachers.length} Guru beserta Kategori.`);
+                  alert(`Berhasil membuat tahun ${formattedYear} dan menyalin data.`);
                } else {
                   alert(`Berhasil membuat tahun ${formattedYear} dengan data kosong.`);
                }
@@ -1693,7 +1770,7 @@
                         </div>
                         <div className="flex items-start gap-2 mt-3 mb-3 px-1">
                            <input type="checkbox" id="copyDataCheck" checked={copyFromCurrent} onChange={e => setCopyFromCurrent(e.target.checked)} className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 mt-0.5 shrink-0" />
-                           <label htmlFor="copyDataCheck" className="text-[10px] md:text-xs text-slate-600 font-medium cursor-pointer leading-tight">Salin Data Guru & Kategori dari Tahun <strong className="text-indigo-600">{selectedYear}</strong> ke Tahun Baru</label>
+                           <label htmlFor="copyDataCheck" className="text-[10px] md:text-xs text-slate-600 font-medium cursor-pointer leading-tight">Salin Data Pengguna & Kategori dari Tahun <strong className="text-indigo-600">{selectedYear}</strong> ke Tahun Baru</label>
                         </div>
                         
                         <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1.5 bg-white border border-slate-200 rounded-lg min-h-[40px]">
@@ -1731,11 +1808,11 @@
         const [notesState, setNotesState] = useState(currentData.principalNotes || '');
 
         const handleToggleSelfSingle = (id) => {
-          if(isAdmin) return;
+          if(isVerifikator) return;
           setSelfCheckedState(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
         };
         const handleToggleSelfMain = (subIds) => {
-          if(isAdmin) return;
+          if(isVerifikator) return;
           const allChecked = subIds.every(id => selfCheckedState.includes(id));
           if (allChecked) setSelfCheckedState(prev => prev.filter(id => !subIds.includes(id)));
           else {
@@ -1746,11 +1823,11 @@
         };
 
         const handleToggleVerifSingle = (id) => {
-          if(isGuru) return;
+          if(!isVerifikator) return;
           setVerifiedCheckedState(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
         };
         const handleToggleVerifMain = (subIds) => {
-          if(isGuru) return;
+          if(!isVerifikator) return;
           const allChecked = subIds.every(id => verifiedCheckedState.includes(id));
           if (allChecked) setVerifiedCheckedState(prev => prev.filter(id => !subIds.includes(id)));
           else {
@@ -1787,7 +1864,7 @@
               </div>
 
               <div className="p-4 md:p-6 overflow-y-auto flex-1">
-                {isAdmin && (
+                {isVerifikator && (
                   <div className="mb-5 md:mb-6 p-3 md:p-4 bg-blue-50 border border-blue-100 rounded-xl">
                      <p className="text-xs md:text-sm text-blue-800 leading-relaxed">
                         <strong>Petunjuk:</strong> Item yang dicentang oleh guru ditandai dengan label <span className="inline-block text-[9px] md:text-[10px] bg-blue-200 text-blue-800 px-1.5 py-0.5 rounded font-bold ml-1">DIAJUKAN</span>. Silakan centang kotak untuk verifikasi.
@@ -1827,7 +1904,7 @@
                                 <span className={`text-sm md:text-base font-semibold leading-snug ${isCheckedForInput ? 'text-indigo-900' : 'text-slate-700'}`}>{cat.name}</span>
                               </div>
                               <div className="flex flex-col gap-1 items-end shrink-0">
-                                {isAdmin && isSelfChecked && <span className="text-[9px] md:text-[10px] bg-blue-100 text-blue-700 px-1.5 md:px-2 py-0.5 md:py-1 rounded font-bold uppercase tracking-wider whitespace-nowrap">Diajukan</span>}
+                                {isVerifikator && isSelfChecked && <span className="text-[9px] md:text-[10px] bg-blue-100 text-blue-700 px-1.5 md:px-2 py-0.5 md:py-1 rounded font-bold uppercase tracking-wider whitespace-nowrap">Diajukan</span>}
                                 {isGuru && isVerifChecked && <span className="text-[9px] md:text-[10px] bg-emerald-100 text-emerald-700 px-1.5 md:px-2 py-0.5 md:py-1 rounded font-bold uppercase tracking-wider whitespace-nowrap"><CheckCircle className="w-3 h-3 inline mr-1"/>ACC</span>}
                               </div>
                             </label>
@@ -1871,7 +1948,7 @@
                                         <span className={`text-xs md:text-sm leading-snug ${isCheckedSubForInput ? (isGuru ? 'text-indigo-700 font-medium' : 'text-emerald-700 font-medium') : 'text-slate-600'}`}>{sub.name}</span>
                                       </div>
                                       <div className="flex flex-col gap-1 items-end shrink-0">
-                                        {isAdmin && isSelfSubChecked && <span className="text-[8px] md:text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-bold uppercase whitespace-nowrap">Diajukan</span>}
+                                        {isVerifikator && isSelfSubChecked && <span className="text-[8px] md:text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-bold uppercase whitespace-nowrap">Diajukan</span>}
                                         {isGuru && isVerifSubChecked && <span className="text-[8px] md:text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold uppercase whitespace-nowrap text-emerald-700"><CheckCircle className="w-2.5 h-2.5 inline mr-0.5"/>ACC</span>}
                                       </div>
                                     </label>
@@ -1890,7 +1967,7 @@
                   <label className="block text-xs md:text-sm font-semibold text-slate-700 mb-2 md:mb-3 flex items-center gap-2"><FolderOpen className="w-4 h-4 text-indigo-500 shrink-0" /> Tautan Dokumen (Google Drive / Lainnya)</label>
                   <div className="relative mb-5 md:mb-6">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><LinkIcon className="h-4 w-4 md:h-5 md:w-5 text-slate-400" /></div>
-                    <input type="url" value={linkState} onChange={(e) => setLinkState(e.target.value)} readOnly={isAdmin} className={`block w-full pl-9 md:pl-10 pr-3 py-2.5 md:py-3 border border-slate-200 rounded-xl text-xs md:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors ${isAdmin ? 'bg-slate-100 text-slate-600 cursor-not-allowed' : 'bg-slate-50 focus:bg-white'}`} placeholder="https://drive.google.com/..." />
+                    <input type="url" value={linkState} onChange={(e) => setLinkState(e.target.value)} readOnly={isVerifikator} className={`block w-full pl-9 md:pl-10 pr-3 py-2.5 md:py-3 border border-slate-200 rounded-xl text-xs md:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors ${isVerifikator ? 'bg-slate-100 text-slate-600 cursor-not-allowed' : 'bg-slate-50 focus:bg-white'}`} placeholder="https://drive.google.com/..." />
                   </div>
 
                   <label className="block text-xs md:text-sm font-semibold text-slate-700 mb-2 md:mb-3 flex items-center gap-2"><AlignLeft className="w-4 h-4 text-indigo-500 shrink-0" /> Catatan & Rekomendasi Supervisor</label>
@@ -1940,11 +2017,11 @@
             </div>
 
             {activeTab === 'dashboard' && <Dashboard />}
-            {activeTab === 'teachers' && isAdmin && <TeachersData />}
+            {activeTab === 'teachers' && isVerifikator && <TeachersData />}
             {activeTab === 'schedules' && <ScheduleData />}
             {activeTab === 'school' && isAdmin && <SchoolData />}
             {activeTab === 'master' && isAdmin && <MasterData />}
-            {activeTab === 'reports' && isAdmin && <ReportsData />}
+            {activeTab === 'reports' && isVerifikator && <ReportsData />}
           </main>
           <SupervisionModal />
         </div>
